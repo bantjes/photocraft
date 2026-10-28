@@ -52,8 +52,8 @@ pub enum ThemeKind {
     SoftDark,
     /// A low-contrast light theme: pale violet-grey surfaces, softened dark text and a periwinkle accent.
     SoftLight,
-    /// Marian PhotoCraft's own (chosen at its first start): a sky-blue frame, tab strips and toolbar with
-    /// black lettering, pale-blue panels, a neutral grey canvas and the current tool on green.
+    /// Marian PhotoCraft's own (chosen at its first start): a dark blue-grey frame, tab strips and
+    /// toolbar, mid-grey menus and panels, a dark grey image window and the current tool on green.
     MarianBlue,
 }
 
@@ -130,6 +130,7 @@ impl ThemeKind {
                 | ThemeKind::AdwaitaDark
                 | ThemeKind::BreezeDark
                 | ThemeKind::SoftDark
+                | ThemeKind::MarianBlue
         )
     }
     /// Whether this theme belongs to the light appearance family.
@@ -685,35 +686,37 @@ impl Tokens {
             // canvas stays a neutral grey so colours in the picture aren't judged against blue.
             ThemeKind::MarianBlue => {
                 let hex = |s: u32| Color32::from_rgb((s >> 16) as u8, (s >> 8) as u8, s as u8);
+                // Emma's colours: a dark blue-grey frame, tab strips and toolbar (28, 36, 73),
+                // menus and panels at 102 grey, the image window at 51 grey.
                 Tokens {
                     kind,
-                    chrome: hex(0x5b9cf0),
-                    canvas: hex(0xc8c8c8),
-                    canvas_dot: hex(0xc8c8c8),
-                    dock: hex(0xc9dcf7),
-                    card: hex(0xe6effc),
-                    card_border: hex(0xa9c4ec),
-                    field: Color32::WHITE,
-                    field_border: hex(0x7fa3d6),
-                    hover: hex(0xcfe0f9),
-                    pressed: hex(0xb5cff4),
-                    text: hex(0x0b1a33),
-                    text_dim: hex(0x24385c),
-                    text_faint: hex(0x4f6386),
-                    icon: hex(0x0b1a33),
-                    accent: hex(0x1f5bd0),
+                    chrome: hex(0x1c2449),
+                    canvas: hex(0x333333),
+                    canvas_dot: hex(0x333333),
+                    dock: hex(0x666666),
+                    card: hex(0x666666),
+                    card_border: hex(0x555555),
+                    field: hex(0x4f4f4f),
+                    field_border: hex(0x3d3d3d),
+                    hover: hex(0x747474),
+                    pressed: hex(0x575757),
+                    text: hex(0xf4f4f4),
+                    text_dim: hex(0xdcdcdc),
+                    text_faint: hex(0xb4b4b4),
+                    icon: hex(0xeeeeee),
+                    accent: hex(0x6d8ce6),
                     // The current tool (and other chosen buttons): green, with a black icon.
                     accent_soft: hex(0x4cbb58),
                     accent_border: hex(0x1e7a2c),
                     accent_text: hex(0x0b2a10),
-                    separator: hex(0xa9c4ec),
-                    shadow: Color32::from_black_alpha(50),
-                    primary_bg: hex(0x1f5bd0),
+                    separator: hex(0x555555),
+                    shadow: Color32::from_black_alpha(80),
+                    primary_bg: hex(0x3b5bc4),
                     primary_text: Color32::WHITE,
-                    tab_strip: hex(0x4a8de6),
-                    row_selected: hex(0xb9d3f6),
-                    histogram_bg: hex(0xdfe3ea),
-                    ..Tokens::for_kind(ThemeKind::ProLight)
+                    tab_strip: hex(0x232c55),
+                    row_selected: hex(0x3a4a85),
+                    histogram_bg: hex(0x4a4a4a),
+                    ..Tokens::for_kind(ThemeKind::ProMedium)
                 }
             }
             // Soft Light: pale violet-grey surfaces, softened dark-violet text (not black) and a

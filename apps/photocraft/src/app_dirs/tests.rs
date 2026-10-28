@@ -465,9 +465,9 @@ fn the_first_start_adopts_the_original_settings_in_blue() {
         assert!(!own.join(left).exists(), "{left} stays with the original");
     }
     let prefs: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(own.join("preferences.json")).unwrap()).unwrap();
-    assert_eq!(prefs["interface"]["lightTheme"], "marianBlue");
-    assert_eq!(prefs["interface"]["appearanceMode"], "light");
-    assert_eq!(prefs["interface"]["darkTheme"], "pro", "the rest of the copied settings stay");
+    assert_eq!(prefs["interface"]["darkTheme"], "marianBlue");
+    assert_eq!(prefs["interface"]["appearanceMode"], "dark");
+    assert_eq!(prefs["interface"]["theme"], "marianBlue");
     assert_eq!(prefs["general"]["x"], 1);
     assert!(original.join("logs").is_dir() && original.join("instance.json").is_file(), "the original is only read");
 
@@ -485,6 +485,6 @@ fn a_fresh_start_without_the_original_is_blue_too() {
     adopt_original(&own, &root.join("Photocraft")).unwrap();
     let prefs: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(own.join("preferences.json")).unwrap()).unwrap();
     assert_eq!(prefs["interface"]["theme"], "marianBlue");
-    assert_eq!(prefs["interface"]["appearanceMode"], "light");
+    assert_eq!(prefs["interface"]["appearanceMode"], "dark");
     let _ = std::fs::remove_dir_all(&root);
 }

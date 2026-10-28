@@ -546,7 +546,7 @@ pub fn adopt_original(own: &Path, original: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Point the preferences at the Marian Blue theme (light appearance), starting a new file when
+/// Point the preferences at the Marian Blue theme (dark appearance), starting a new file when
 /// there is none. An unreadable file is left as it is.
 fn use_blue_look(prefs: &Path) {
     let text = if prefs.exists() { std::fs::read_to_string(prefs).ok() } else { Some("{}".to_owned()) };
@@ -555,8 +555,8 @@ fn use_blue_look(prefs: &Path) {
     let interface = root.entry("interface").or_insert_with(|| serde_json::json!({}));
     if let Some(i) = interface.as_object_mut() {
         i.insert("theme".into(), serde_json::json!("marianBlue"));
-        i.insert("appearanceMode".into(), serde_json::json!("light"));
-        i.insert("lightTheme".into(), serde_json::json!("marianBlue"));
+        i.insert("appearanceMode".into(), serde_json::json!("dark"));
+        i.insert("darkTheme".into(), serde_json::json!("marianBlue"));
     }
     if let Ok(text) = serde_json::to_string_pretty(&v)
         && let Err(e) = photocraft_format::atomic_write(prefs, text.as_bytes())

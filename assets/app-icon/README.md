@@ -48,7 +48,7 @@ Replace `photocraft.svg` (and `photocraft-small.svg`), then run `packaging/icons
 
 ## Marian PhotoCraft
 
-`marian-photocraft.svg` is this build's own icon: a white camera on a blue tile, the same 512-unit
+`marian-photocraft.svg` is this build's own icon: a camera lens in a white ring on a dark blue tile, the same 512-unit
 rounded square (`rx=112`). `marian-photocraft-1024.png` and `marian-photocraft.icns` are its macOS
 renders, padded like the others to Apple's 824/1024 grid (viewBox `-62 -62 636 636`), rendered with
 resvg 0.45.1; the `.icns` was packed with Pillow. `cargo xtask bundle` puts it in the app.

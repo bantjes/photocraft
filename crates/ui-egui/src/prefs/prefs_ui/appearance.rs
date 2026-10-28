@@ -46,7 +46,6 @@ pub(super) fn selected_theme(interface: &prefs::Interface, system: Option<egui::
             LightTheme::Adwaita => ThemeKind::Adwaita,
             LightTheme::BreezeLight => ThemeKind::BreezeLight,
             LightTheme::SoftLight => ThemeKind::SoftLight,
-            LightTheme::MarianBlue => ThemeKind::MarianBlue,
         }
     } else {
         match interface.dark_theme {
@@ -57,6 +56,7 @@ pub(super) fn selected_theme(interface: &prefs::Interface, system: Option<egui::
             DarkTheme::AdwaitaDark => ThemeKind::AdwaitaDark,
             DarkTheme::BreezeDark => ThemeKind::BreezeDark,
             DarkTheme::SoftDark => ThemeKind::SoftDark,
+            DarkTheme::MarianBlue => ThemeKind::MarianBlue,
         }
     }
 }
@@ -105,7 +105,6 @@ pub(super) const LIGHT_THEME_OPTIONS: &[(&str, ThemeKind)] = &[
     ("adwaita", ThemeKind::Adwaita),
     ("breezeLight", ThemeKind::BreezeLight),
     ("softLight", ThemeKind::SoftLight),
-    ("marianBlue", ThemeKind::MarianBlue),
 ];
 
 pub(super) const DARK_THEME_OPTIONS: &[(&str, ThemeKind)] = &[
@@ -116,6 +115,7 @@ pub(super) const DARK_THEME_OPTIONS: &[(&str, ThemeKind)] = &[
     ("adwaitaDark", ThemeKind::AdwaitaDark),
     ("breezeDark", ThemeKind::BreezeDark),
     ("softDark", ThemeKind::SoftDark),
+    ("marianBlue", ThemeKind::MarianBlue),
 ];
 
 pub(super) fn favorite_theme_groups(favorites: &[SavedTheme]) -> (Vec<ThemeKind>, Vec<ThemeKind>) {
