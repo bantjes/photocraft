@@ -131,7 +131,7 @@ thread_local! {
 }
 
 /// Whether the starting sort applies (`ShellUi::without_starting_sort` turns it off).
-fn sorted(app: &PhotocraftApp) -> bool {
+pub(crate) fn sorted(app: &PhotocraftApp) -> bool {
     #[cfg(test)]
     if !SORTED.get() {
         return false;
@@ -448,9 +448,57 @@ fn started_id() -> egui::Id {
     egui::Id::unique("closet-started")
 }
 
+/// The panel groups this build starts with, made from the standard ones: (panel, the panel it
+/// goes beside, in a group of its own just below that panel's group rather than in it).
+/// Layers + Channels, Properties + Info, Color + Swatches + Gradients, Actions alone, History
+/// alone, Character + Paragraph, Brushes; Adjustments and Paths get groups of their own.
+const GROUPS: &[(&str, &str, bool)] =
+    &[("info", "properties", false), ("adjustments", "properties", true), ("paths", "layers", true), ("actions", "history", true)];
+
+/// Panels this build starts with showing, besides the standard ones.
+const SHOWN: &[&str] = &["info", "history", "actions"];
+
+/// While the panels have the standard arrangement (at the start, and after Reset Workspace),
+/// regroup them as [`GROUPS`] says. A workspace the user changed stays as it is.
+fn starting_groups(app: &mut PhotocraftApp, ctx: &egui::Context) {
+    if !sorted(app) || app.ui.docking.is_some() {
+        return;
+    }
+    let done = egui::Id::unique("closet-groups-generation");
+    if ctx.data(|d| d.get_temp::<u64>(done)) == Some(app.ui.docking_generation) {
+        return;
+    }
+    ctx.data_mut(|d| d.insert_temp(done, app.ui.docking_generation));
+    for panel in SHOWN {
+        if !crate::panel_docking::current_layout(app).contains(&(*panel).to_owned()) {
+            // Showing a panel that is already showing is no error worth reporting.
+            let _ = crate::menus::invoke(app, ctx, &format!("window.panel.{panel}"), json!({ "show": true }));
+        }
+    }
+    for (panel, anchor, own) in GROUPS {
+        let layout = crate::panel_docking::current_layout(app);
+        if !layout.contains(&(*anchor).to_owned()) {
+            continue;
+        }
+        use craft_ui::docking::{Action, Placement};
+        let placement = if *own { Placement::Group { below: true, height: None } } else { Placement::Tab { before: None } };
+        let action = Action::Move { panel: (*panel).to_owned(), anchor: (*anchor).to_owned(), placement };
+        // A panel that can't move there keeps its standard place: nothing worth reporting.
+        let _ = app.run("window.panel.layout", json!({ "action": action }));
+    }
+    // Each group shows its first panel.
+    for panel in ["properties", "history"] {
+        let _ = app.run("window.panel.layout", json!({ "action": craft_ui::docking::Action::Activate { panel: panel.to_owned() } }));
+    }
+    // Panels the standard groups brought along that are put away close again.
+    tidy_away(app, ctx);
+    ctx.data_mut(|d| d.insert_temp(done, app.ui.docking_generation));
+}
+
 /// Draws the Closet window when it is open. On the first frame, closes the panels the starting
 /// sort put away.
 pub fn windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
+    starting_groups(app, ctx);
     if !ctx.data(|d| d.get_temp::<bool>(started_id()).unwrap_or(false)) {
         ctx.data_mut(|d| d.insert_temp(started_id(), true));
         tidy_away(app, ctx);
@@ -464,6 +512,7 @@ pub fn windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
     let mut close = false;
     let mut moves: Vec<(String, Shelf)> = Vec::new();
     let mut reset: Option<bool> = None;
+    let mut restore_order = false;
     let things = things();
     let shelves: Vec<Shelf> = things.iter().map(|th| shelf(app, &th.key)).collect();
     crate::analysis_ui::panel_window(app, ctx, "closet", tl!("Closet"), vec2(-360.0, 60.0), 380.0, |ui| {
@@ -481,6 +530,15 @@ pub fn windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
             _ => "Everything that can be put away. Pick where each one lives.",
         };
         ui.label(RichText::new(tl!(blurb)).size(11.5).color(t.text_dim));
+        ui.add_space(4.0);
+        if let Some((tool, to)) = drop_shelves(ui, &t) {
+            moves.push((tool_key(tool), to));
+        }
+        ui.label(
+            RichText::new(tl!("While this window is open, drag tools up and down the toolbar to rearrange them, or onto another tool to group them."))
+                .size(11.0)
+                .color(t.text_faint),
+        );
         ui.add_space(4.0);
         ui.add(egui::TextEdit::singleline(&mut query).hint_text(tl!("Search")).desired_width(f32::INFINITY));
         ui.add_space(4.0);
@@ -540,6 +598,9 @@ pub fn windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
                 reset = Some(true);
             }
         });
+        if crate::toolbar_arrange::rearranged(app) && crate::widgets::secondary_button(ui, tl!("Restore Toolbar Order"), 0.0).clicked() {
+            restore_order = true;
+        }
     });
     ctx.data_mut(|d| {
         d.insert_temp(tab_id(), tab);
@@ -555,9 +616,42 @@ pub fn windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
     {
         app.ui.status = e;
     }
+    if restore_order && let Err(e) = crate::menus::invoke(app, ctx, "toolbar.resetArrangement", json!({})) {
+        app.ui.status = e;
+    }
     if close {
         app.ui.shell.closet_open = false;
     }
+}
+
+/// The Closet and Basement shelves a toolbar tool drops on: the tool dropped and where it goes.
+fn drop_shelves(ui: &mut egui::Ui, t: &Tokens) -> Option<(Tool, Shelf)> {
+    let mut dropped = None;
+    let dragging = egui::DragAndDrop::has_payload_of_type::<crate::toolbar_arrange::ToolDrag>(ui.ctx());
+    ui.columns(2, |cols| {
+        for (col, (name, icon, to)) in cols.iter_mut().zip([("Closet", "closet", Shelf::Closet), ("Basement", "basement", Shelf::Basement)]) {
+            let (r, resp) = col.allocate_exact_size(vec2(col.available_width(), 46.0), egui::Sense::hover());
+            resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Group, true, format!("{} shelf", tl!(name))));
+            let over = resp.dnd_hover_payload::<crate::toolbar_arrange::ToolDrag>().is_some();
+            let fill = if over { t.hover } else { t.field };
+            let stroke = egui::Stroke::new(if dragging { 2.0 } else { 1.0 }, if dragging { t.accent } else { t.card_border });
+            col.painter().rect_filled(r, 6.0, fill);
+            col.painter().rect_stroke(r, 6.0, stroke, egui::StrokeKind::Inside);
+            crate::icons::paint(col, egui::Rect::from_center_size(egui::pos2(r.left() + 20.0, r.center().y), vec2(20.0, 20.0)), icon, 18.0, t.icon);
+            col.painter().text(egui::pos2(r.left() + 38.0, r.center().y - 7.0), egui::Align2::LEFT_CENTER, tl!(name), egui::FontId::proportional(12.5), t.text);
+            col.painter().text(
+                egui::pos2(r.left() + 38.0, r.center().y + 8.0),
+                egui::Align2::LEFT_CENTER,
+                tl!("Drop a tool here"),
+                egui::FontId::proportional(10.5),
+                t.text_dim,
+            );
+            if let Some(drag) = resp.dnd_release_payload::<crate::toolbar_arrange::ToolDrag>() {
+                dropped = Some((drag.0, to));
+            }
+        }
+    });
+    dropped
 }
 
 #[cfg(test)]

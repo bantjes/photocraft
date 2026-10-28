@@ -576,6 +576,8 @@ pub(crate) fn show(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     style.accent = t.accent;
     style.right_to_left = crate::direction::is_rtl();
     style.new_dock_zones = true;
+    // Marian PhotoCraft: a middle click on a tab closes that panel, as its × does.
+    style.middle_click_closes_tabs = true;
     let style = style.localized(|key| DOCK_LABELS.iter().find(|(k, _)| *k == key).map(|(_, english)| tl!(english).to_string()));
     let mut dock = craft_ui::docking::DockArea::new(area)
         .locked(locked)
@@ -624,6 +626,7 @@ pub(crate) fn show(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     let forwarded = std::mem::take(&mut output.forwarded_events);
     crate::shortcuts::handle_forwarded(app, ui.ctx(), forwarded, output.forwarded_modifiers.unwrap_or_default());
     let mut actions = output.actions;
+    tab_close_buttons(ui, &layout, locked, &mut actions);
     pin_group_heights(ui.ctx(), &layout, &mut actions);
     for action in actions {
         let result = match action {
@@ -639,8 +642,72 @@ pub(crate) fn show(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
         }
     }
     for (id, params) in commands {
-        if let Err(error) = app.run(id, params) {
+        let ctx = ui.ctx().clone();
+        let result = if id.starts_with("closet.") { crate::menus::invoke(app, &ctx, id, params) } else { app.run(id, params) };
+        if let Err(error) = result {
             app.ui.status = error;
+        }
+    }
+}
+
+/// The layout drawn now: the customized workspace, else the native dock's arrangement.
+pub(crate) fn current_layout(app: &PhotocraftApp) -> Layout<String> {
+    match &app.ui.docking {
+        Some(workspace) => workspace.layout.clone(),
+        None => legacy(app),
+    }
+}
+
+/// Marian PhotoCraft: a × at the end of each panel tab closes just that panel (Close Panel); the
+/// rest of its group stays. Window › the panel's name brings it back.
+fn tab_close_buttons(ui: &mut egui::Ui, layout: &Layout<String>, locked: bool, actions: &mut Vec<Action<String>>) {
+    if locked {
+        return;
+    }
+    let t = crate::theme::Tokens::get(ui.ctx());
+    for (id, ..) in PANELS {
+        let id = (*id).to_owned();
+        if !layout.contains(&id) {
+            continue;
+        }
+        // The tab as craft-ui drew it last frame.
+        let Some(tab) = ui.ctx().read_response(area_id().with(("tab", &id))) else { continue };
+        if tab.rect.width() < 48.0 {
+            continue;
+        }
+        let r = egui::Rect::from_center_size(egui::pos2(tab.rect.right() - 12.0, tab.rect.center().y), egui::vec2(16.0, 16.0));
+        let mut child = ui.new_child(egui::UiBuilder::new().layer_id(tab.layer_id).max_rect(r));
+        child.set_clip_rect(tab.rect.intersect(tab.interact_rect));
+        let resp = child.interact(r, area_id().with(("tab-close", &id)), egui::Sense::click());
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, format!("{} {}", tl!("Close Panel"), id)));
+        let hot = resp.hovered();
+        if hot {
+            child.painter().rect_filled(r, 3.0, t.hover);
+        }
+        let color = if hot { t.text } else { t.text_faint };
+        let c = r.center();
+        let d = 3.5;
+        let stroke = egui::Stroke::new(1.3, color);
+        child.painter().line_segment([c + egui::vec2(-d, -d), c + egui::vec2(d, d)], stroke);
+        child.painter().line_segment([c + egui::vec2(-d, d), c + egui::vec2(d, -d)], stroke);
+        let resp = resp.on_hover_text(tl!("Close Panel"));
+        if resp.clicked() {
+            actions.push(Action::Close { panel: id });
+        }
+    }
+}
+
+/// Marian PhotoCraft: Put in Closet and Put in Basement for `panel`, when it can be put away.
+fn closet_items(ui: &mut egui::Ui, panel: &str, commands: &mut Vec<(&'static str, Value)>) {
+    let key = format!("panel:{panel}");
+    if !crate::closet::things().iter().any(|thing| thing.key == key) {
+        return;
+    }
+    ui.separator();
+    for (label, shelf) in [("Put in Closet", "closet"), ("Put in Basement", "basement")] {
+        if ui.button(tl!(label)).clicked() {
+            commands.push(("closet.set", json!({"key": key, "shelf": shelf})));
+            ui.close();
         }
     }
 }
@@ -1003,6 +1070,11 @@ pub(crate) fn rail_click(app: &mut PhotocraftApp, group: Group) {
 }
 
 /// The docked tab groups, top to bottom, without the canvas.
+#[cfg(test)]
+pub(crate) fn groups_for_tests(layout: &Layout<String>) -> Vec<Vec<String>> {
+    root_groups(layout)
+}
+
 fn root_groups(layout: &Layout<String>) -> Vec<Vec<String>> {
     layout.root.iter().flat_map(tree_groups).map(|group| group.panels).filter(|panels| !panels.iter().any(|id| id == CANVAS)).collect()
 }
@@ -1243,6 +1315,12 @@ impl craft_ui::docking::DockContent<String> for PanelContent<'_> {
     }
     fn panel_menu(&mut self, ui: &mut egui::Ui, id: &String) {
         panel_menu(self.app, ui, id);
+        closet_items(ui, id, self.commands);
+        ui.separator();
+    }
+    /// Room at the tab's end for its × (`tab_close_buttons`).
+    fn label(&mut self, _ui: &egui::Ui, _id: &String, logical: &str, _font: &egui::FontId, _color: egui::Color32) -> egui::WidgetText {
+        format!("{logical}\u{2002}\u{2009}").into()
     }
     fn allow_native(&self, id: &String) -> bool {
         !self.card.contains(id)
@@ -1277,7 +1355,12 @@ impl craft_ui::docking::DockContent<String> for PanelContent<'_> {
                     }
                 }
             }
+            closet_items(ui, active, self.commands);
             ui.separator();
+            if ui.add_enabled(!locked, egui::Button::new(tl!("Close Panel"))).clicked() {
+                self.commands.push(("window.panel.layout", json!({"action": Action::Close { panel: active.clone() }})));
+                ui.close();
+            }
             if ui.add_enabled(!locked, egui::Button::new(tl!("Close Tab Group"))).clicked() {
                 self.commands.push(("window.panel.group", json!({"panel":active,"operation":"close"})));
                 ui.close();

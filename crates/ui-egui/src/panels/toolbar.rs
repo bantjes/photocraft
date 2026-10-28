@@ -69,6 +69,19 @@ pub(super) fn visible_sections(hidden: &[String]) -> Vec<Vec<(usize, Vec<Tool>)>
     sections
 }
 
+/// The arranged toolbar (`toolbar_arrange::slots`) as one section, without the hidden tools.
+/// Its slots are numbered from 1000, so their remembered tools don't mix with the standard ones'.
+fn arranged_sections(slots: &[Vec<Tool>], hidden: &[String]) -> Vec<Vec<(usize, Vec<Tool>)>> {
+    let hidden: Vec<Tool> = hidden.iter().map(String::as_str).filter_map(Tool::from_name).collect();
+    let section: Vec<(usize, Vec<Tool>)> = slots
+        .iter()
+        .enumerate()
+        .map(|(i, slot)| (1000 + i, slot.iter().copied().filter(|tool| !hidden.contains(tool)).collect::<Vec<_>>()))
+        .filter(|(_, tools)| !tools.is_empty())
+        .collect();
+    if section.is_empty() { Vec::new() } else { vec![section] }
+}
+
 /// A primary-button gesture started on this tool; open only after it leaves its hit area.
 /// Using pointer origin rather than `Response::dragged` also works for click-only icon buttons.
 pub(super) fn tool_flyout_drag_open(button: Rect, origin: Option<Pos2>, pointer: Option<Pos2>, primary_down: bool) -> bool {
@@ -86,7 +99,12 @@ pub fn toolbar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     let mut hidden = app.session.prefs().toolbar.hidden.clone();
     // Tools put away in the Closet or the Basement leave the toolbar too.
     hidden.extend(crate::closet::hidden_tool_names(app));
-    let sections = visible_sections(&hidden);
+    let sections = match crate::toolbar_arrange::slots(app) {
+        Some(slots) => arranged_sections(&slots, &hidden),
+        None => visible_sections(&hidden),
+    };
+    // While the Closet is open the tools drag: along the toolbar, and onto its shelves.
+    let arranging = app.ui.shell.closet_open;
     // Two columns when the header chevron asks for them; a column that doesn't fit scrolls.
     let double = app.ui.panels.toolbar_double;
     let w = if double { w1 + bx + 2.0 } else { w1 };
@@ -170,6 +188,9 @@ pub fn toolbar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                                     if slot.len() > 1 {
                                         paint_toolbar_flyout_indicator(ui, &t, &resp);
                                     }
+                                    if arranging {
+                                        crate::toolbar_arrange::slot(app, ui, &resp, tool, double);
+                                    }
                                     if resp.clicked() && ui.data(|d| d.get_temp::<egui::Id>(held_id)) != Some(key) {
                                         crate::tool_memory::select(app, tool);
                                     }
@@ -192,9 +213,11 @@ pub fn toolbar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                                     {
                                         ui.ctx().request_repaint_after(std::time::Duration::from_secs_f64(0.35 - seconds));
                                     }
-                                    let long_press = held_for.is_some_and(|seconds| seconds >= 0.35);
-                                    let drag_open = ui
-                                        .input(|i| tool_flyout_drag_open(resp.rect, i.pointer.press_origin(), i.pointer.hover_pos(), i.pointer.primary_down()));
+                                    let long_press = !arranging && held_for.is_some_and(|seconds| seconds >= 0.35);
+                                    let drag_open = !arranging
+                                        && ui.input(|i| {
+                                            tool_flyout_drag_open(resp.rect, i.pointer.press_origin(), i.pointer.hover_pos(), i.pointer.primary_down())
+                                        });
                                     // Clicking the button of its open flyout again, with either button, closes
                                     // it (#4932); the release that ends the long press that opened it doesn't.
                                     let open_here = ui.data(|d| d.get_temp::<(egui::Id, Rect)>(flyout_id)).is_some_and(|(k, _)| k == key);

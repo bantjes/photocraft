@@ -283,6 +283,9 @@ pub(crate) fn invoke_unguarded(app: &mut PhotocraftApp, ctx: &egui::Context, id:
     if let Some(result) = crate::closet::command(app, ctx, id, &params) {
         return result;
     }
+    if let Some(result) = crate::toolbar_arrange::command(app, id, &params) {
+        return result;
+    }
     if let Some(result) = invoke_shell_commands(app, ctx, id, &params) {
         return result;
     }

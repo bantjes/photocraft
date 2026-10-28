@@ -70,6 +70,8 @@ pub const SHELL_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("closet.set", "Move to Closet or Basement", &[], None),
     ("closet.reset", "Restore Starting Sort", &[], None),
     ("closet.list", "List Closet and Basement", &[], None),
+    ("toolbar.arrange", "Arrange Toolbar", &[], None),
+    ("toolbar.resetArrangement", "Restore Toolbar Arrangement", &[], None),
     // Photoshop's Tab and ⇧Tab: all panels (Tools, options bar and the dock), or only the dock.
     ("window.togglePanels", "Show/Hide All Panels", &[], Some("Tab")),
     ("window.toggle.dock", "Show/Hide Panels", &[], Some("Shift+Tab")),

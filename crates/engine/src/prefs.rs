@@ -1047,6 +1047,11 @@ impl MenuCustomization {
 pub struct ToolbarCustomization {
     pub hidden: Vec<String>,
     pub order: Vec<String>,
+    /// The toolbar as the user arranged it (Window › Closet… open, tools dragged): its slots top
+    /// to bottom, each a flyout group of tool names. Empty: the standard arrangement. JSON owned
+    /// by the shell.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub slots: Vec<Vec<String>>,
 }
 
 /// Layer Mask Display Options (double-click the layer mask's row in the Channels panel, or Mask

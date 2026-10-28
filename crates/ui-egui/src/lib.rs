@@ -27,6 +27,7 @@ pub mod icons;
 pub mod jobs_ui;
 pub(crate) mod last_brush;
 pub mod links;
+pub mod toolbar_arrange;
 
 /// The app's name wherever it is shown (window title, menu bar, About, start screen).
 pub const DISPLAY_NAME: &str = "Marian PhotoCraft";
@@ -697,6 +698,8 @@ mod color_swatch_tests;
 #[cfg(test)]
 mod profile_open_tests;
 
+#[cfg(test)]
+mod closet_click_tests;
 #[cfg(test)]
 mod profile_prompt_tests;
 
