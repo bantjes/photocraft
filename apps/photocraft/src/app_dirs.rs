@@ -7,8 +7,11 @@
 //!    everything in `<exe dir>/PhotoCraftData`, so a portable copy on a USB stick leaves nothing in
 //!    `%APPDATA%`. The Windows portable zip ships with `portable.txt`; the MSI doesn't. If that
 //!    folder can't be written (read-only medium, Program Files), the app warns and falls back.
-//! 3. The platform convention: macOS `~/Library/Application Support/Photocraft`, Windows
-//!    `%APPDATA%\Photocraft`, Linux `$XDG_CONFIG_HOME/photocraft` or `~/.config/photocraft`.
+//! 3. The platform convention, in a folder of this build's own, so the original PhotoCraft keeps
+//!    its settings to itself: macOS `~/Library/Application Support/Marian PhotoCraft`, Windows
+//!    `%APPDATA%\Marian PhotoCraft`, Linux `$XDG_CONFIG_HOME/marian-photocraft` or
+//!    `~/.config/marian-photocraft`. The first start copies the original PhotoCraft's folder into
+//!    it ([`adopt_original`]).
 //!
 //! One exception: the platform convention keeps crash-recovery autosaves out of what is synced
 //! with the settings: the Windows roaming profile and the Linux config folder ([`recovery_dir`]).
@@ -49,6 +52,12 @@ pub fn current() -> &'static DataDir {
     DIR.get_or_init(|| {
         let exe = std::env::current_exe().ok();
         let d = resolve(|k| std::env::var_os(k), exe.as_deref().and_then(Path::parent));
+        if d.mode == Mode::Platform
+            && let (Some(own), Some(original)) = (d.dir.as_deref(), original_platform_dir(&|k| std::env::var_os(k)))
+            && let Err(e) = adopt_original(own, &original)
+        {
+            log::warn!("{e}");
+        }
         if let Some(w) = &d.warning {
             log::warn!("{w}");
             eprintln!("photocraft: {w}");
@@ -95,7 +104,7 @@ pub fn resolve_recovery(data: &DataDir, env: impl Fn(&str) -> Option<OsString>) 
     if data.mode == Mode::Platform {
         if cfg!(windows) {
             if let Some(local) = env("LOCALAPPDATA").filter(|l| !l.is_empty()) {
-                return Some(PathBuf::from(local).join("Photocraft").join(RECOVERY));
+                return Some(PathBuf::from(local).join(OWN_NAMES.0).join(RECOVERY));
             }
         } else if !cfg!(target_os = "macos") {
             let state = env("XDG_STATE_HOME")
@@ -103,7 +112,7 @@ pub fn resolve_recovery(data: &DataDir, env: impl Fn(&str) -> Option<OsString>) 
                 .filter(|s| s.is_absolute())
                 .or_else(|| env("HOME").filter(|h| !h.is_empty()).map(|h| PathBuf::from(h).join(".local").join("state")));
             if let Some(state) = state {
-                return Some(state.join("photocraft").join(RECOVERY));
+                return Some(state.join(OWN_NAMES.1).join(RECOVERY));
             }
         }
     }
@@ -474,16 +483,86 @@ pub fn resolve(env: impl Fn(&str) -> Option<OsString>, exe_dir: Option<&Path>) -
     }
 }
 
+/// This build's settings folder names (macOS and Windows, then Linux and BSD), and the original
+/// PhotoCraft's.
+const OWN_NAMES: (&str, &str) = ("Marian PhotoCraft", "marian-photocraft");
+const ORIGINAL_NAMES: (&str, &str) = ("Photocraft", "photocraft");
+
 /// The platform convention, from `env` (so tests can fake `HOME`/`APPDATA`/`XDG_CONFIG_HOME`).
 pub fn platform_dir(env: &impl Fn(&str) -> Option<OsString>) -> Option<PathBuf> {
+    named_dir(OWN_NAMES, env)
+}
+
+/// The original PhotoCraft's settings folder, which the first start copies ([`adopt_original`]).
+pub fn original_platform_dir(env: &impl Fn(&str) -> Option<OsString>) -> Option<PathBuf> {
+    named_dir(ORIGINAL_NAMES, env)
+}
+
+fn named_dir((name, lower): (&str, &str), env: &impl Fn(&str) -> Option<OsString>) -> Option<PathBuf> {
     let home = env("HOME").filter(|h| !h.is_empty()).map(PathBuf::from);
     if cfg!(target_os = "macos") {
-        return home.map(|h| h.join("Library/Application Support/Photocraft"));
+        return home.map(|h| h.join("Library/Application Support").join(name));
     }
     if cfg!(windows) {
-        return env("APPDATA").filter(|a| !a.is_empty()).map(|a| PathBuf::from(a).join("Photocraft"));
+        return env("APPDATA").filter(|a| !a.is_empty()).map(|a| PathBuf::from(a).join(name));
     }
-    env("XDG_CONFIG_HOME").filter(|x| !x.is_empty()).map(PathBuf::from).or_else(|| home.map(|h| h.join(".config"))).map(|c| c.join("photocraft"))
+    env("XDG_CONFIG_HOME").filter(|x| !x.is_empty()).map(PathBuf::from).or_else(|| home.map(|h| h.join(".config"))).map(|c| c.join(lower))
+}
+
+/// What the first start leaves behind when it copies the original folder: its logs, its
+/// crash-recovery copies and the files that say which PhotoCraft is running.
+const NOT_ADOPTED: [&str; 6] = ["logs", RECOVERY, "instance.lock", "instance.json", MIGRATION_LOCK, crate::gpu_startup::MARKER_FILE];
+
+/// The first time this build's own settings folder `own` is needed and doesn't exist yet, copy the
+/// original PhotoCraft's folder into it (when there is one), so brushes, presets and settings
+/// carry over, and choose this build's blue look. The original folder is only read.
+pub fn adopt_original(own: &Path, original: &Path) -> Result<(), String> {
+    if own.exists() || own == original {
+        return Ok(());
+    }
+    std::fs::create_dir_all(own).map_err(|e| format!("couldn't create {}: {e}", own.display()))?;
+    if !original.is_dir() {
+        use_blue_look(&own.join("preferences.json"));
+        return Ok(());
+    }
+    for entry in std::fs::read_dir(original).map_err(|e| format!("couldn't read {}: {e}", original.display()))?.flatten() {
+        let name = entry.file_name();
+        if NOT_ADOPTED.iter().any(|n| name == std::ffi::OsStr::new(n)) {
+            continue;
+        }
+        let target = own.join(&name);
+        let copied = match entry.file_type() {
+            Ok(t) if t.is_dir() => copy_tree(&entry.path(), &target, 0),
+            Ok(t) if t.is_file() => copy_file(&entry.path(), &target),
+            _ => continue,
+        };
+        // One unreadable file doesn't stop the rest from coming over.
+        if let Err(e) = copied {
+            log::warn!("couldn't copy {}: {e}", entry.path().display());
+        }
+    }
+    use_blue_look(&own.join("preferences.json"));
+    log::info!("copied the settings from {} to {}", original.display(), own.display());
+    Ok(())
+}
+
+/// Point the preferences at the Marian Blue theme (light appearance), starting a new file when
+/// there is none. An unreadable file is left as it is.
+fn use_blue_look(prefs: &Path) {
+    let text = if prefs.exists() { std::fs::read_to_string(prefs).ok() } else { Some("{}".to_owned()) };
+    let Some(mut v) = text.and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok()) else { return };
+    let Some(root) = v.as_object_mut() else { return };
+    let interface = root.entry("interface").or_insert_with(|| serde_json::json!({}));
+    if let Some(i) = interface.as_object_mut() {
+        i.insert("theme".into(), serde_json::json!("marianBlue"));
+        i.insert("appearanceMode".into(), serde_json::json!("light"));
+        i.insert("lightTheme".into(), serde_json::json!("marianBlue"));
+    }
+    if let Ok(text) = serde_json::to_string_pretty(&v)
+        && let Err(e) = photocraft_format::atomic_write(prefs, text.as_bytes())
+    {
+        log::warn!("couldn't switch the copied preferences to the blue look: {e}");
+    }
 }
 
 /// The first portable marker file in `exe_dir`, if any.

@@ -1,6 +1,5 @@
 //! The crate's integration tests, linked into one test binary.
 
-mod affinity;
 mod artboard_export_names;
 mod atn_crystallize_cell_size;
 mod atn_ripple_amount;
@@ -18,7 +17,6 @@ mod convert_keeps_references;
 mod copy_shape_placement;
 mod corpus_atn;
 mod crop_content_aware;
-mod current_affinity_artboards;
 mod duplicate_layer_comps;
 mod duplicate_slices;
 mod duplicate_variables;

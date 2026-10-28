@@ -124,6 +124,11 @@ pub(crate) fn normalize(raw: &str) -> Option<&'static str> {
     PANELS.iter().find(|(id, label, _)| id.eq_ignore_ascii_case(raw.trim()) || label.eq_ignore_ascii_case(raw.trim())).map(|p| p.0)
 }
 
+/// The native dock group that holds `id`, and the panel's tab label in it.
+pub(crate) fn group_of(id: &str) -> Option<(Group, &'static str)> {
+    PANELS.iter().find(|p| p.0 == id).map(|p| (p.2, p.1))
+}
+
 fn registered(id: &str) -> bool {
     id == CANVAS || normalize(id) == Some(id)
 }

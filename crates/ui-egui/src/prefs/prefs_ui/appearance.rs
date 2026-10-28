@@ -46,6 +46,7 @@ pub(super) fn selected_theme(interface: &prefs::Interface, system: Option<egui::
             LightTheme::Adwaita => ThemeKind::Adwaita,
             LightTheme::BreezeLight => ThemeKind::BreezeLight,
             LightTheme::SoftLight => ThemeKind::SoftLight,
+            LightTheme::MarianBlue => ThemeKind::MarianBlue,
         }
     } else {
         match interface.dark_theme {
@@ -104,6 +105,7 @@ pub(super) const LIGHT_THEME_OPTIONS: &[(&str, ThemeKind)] = &[
     ("adwaita", ThemeKind::Adwaita),
     ("breezeLight", ThemeKind::BreezeLight),
     ("softLight", ThemeKind::SoftLight),
+    ("marianBlue", ThemeKind::MarianBlue),
 ];
 
 pub(super) const DARK_THEME_OPTIONS: &[(&str, ThemeKind)] = &[

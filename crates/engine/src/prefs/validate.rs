@@ -7,7 +7,7 @@ use super::{
 };
 
 /// Preferences dialog sections in Photoshop's order: (id, title).
-pub const SECTIONS: [(&str, &str); 18] = [
+pub const SECTIONS: [(&str, &str); 17] = [
     ("general", "General"),
     ("interface", "Interface"),
     ("workspace", "Workspace"),
@@ -25,7 +25,6 @@ pub const SECTIONS: [(&str, &str); 18] = [
     ("type", "Type"),
     ("enhancedControls", "Enhanced Controls"),
     ("rawDefaults", "Camera Raw Defaults"),
-    ("integrations", "Integrations"),
 ];
 
 /// Preferences that nothing reads yet, so Edit › Preferences doesn't show them: a control that
@@ -35,6 +34,11 @@ pub const SECTIONS: [(&str, &str); 18] = [
 /// When you implement one, remove it here; the `prefs_usage` test fails while a listed
 /// preference is read anywhere outside `prefs.rs`, and while an unlisted one is read nowhere.
 pub const HIDDEN_UNTIL_IMPLEMENTED: &[&str] = &[
+    // Marian PhotoCraft has no update checker.
+    "general.automaticallyCheckUpdates",
+    // Marian PhotoCraft has no control port or AI connector; kept only so old files load.
+    "integrations.allowAgentControl",
+    "integrations.controlPort",
     "general.colorPicker",
     "workspace.autoShowHiddenPanels",
     "workspace.enableFloatingDocumentWindowDocking",

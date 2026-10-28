@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "apps/*", "xtask"]
-default-members = ["crates/*", "apps/photocraft", "apps/photocraft-cli", "xtask"]
+default-members = ["crates/*", "apps/photocraft", "xtask"]
 
 [workspace.package]
 version = "0.16.0"
@@ -21,7 +21,6 @@ photocraft-ops = { path = "crates/ops" }
 photocraft-psd = { path = "crates/psd" }
 photocraft-codecs = { path = "crates/codecs" }
 photocraft-raw = { path = "crates/raw" }
-photocraft-affinity = { path = "crates/affinity" }
 photocraft-compose = { path = "crates/compose" }
 photocraft-gpu = { path = "crates/gpu" }
 photocraft-paint = { path = "crates/paint" }
@@ -30,7 +29,6 @@ photocraft-io = { path = "crates/io" }
 photocraft-text = { path = "crates/text" }
 photocraft-vector = { path = "crates/vector" }
 photocraft-format = { path = "crates/format" }
-photocraft-automation = { path = "crates/automation" }
 photocraft-plugins = { path = "crates/plugins" }
 photocraft-engine = { path = "crates/engine" }
 photocraft-ui-egui = { path = "crates/ui-egui" }
@@ -42,7 +40,6 @@ photocraft-ipp = { path = "crates/ipp" }
 craft-print = { git = "https://github.com/storytold/craft-libs", rev = "92d392cff132eaf53e13afff77f38b5c11b73aa0" }
 craft-docpath = { version = "0.1.0", git = "https://github.com/storytold/craft-libs", rev = "92d392cff132eaf53e13afff77f38b5c11b73aa0" }
 craft-jpeg = { git = "https://github.com/storytold/craft-libs", rev = "92d392cff132eaf53e13afff77f38b5c11b73aa0" }
-craft-update = { git = "https://github.com/storytold/craft-libs", version = "=0.1.0", rev = "92d392cff132eaf53e13afff77f38b5c11b73aa0", features = ["egui"] }
 thiserror = "2"
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
@@ -143,8 +140,6 @@ opt-level = "z"
 [profile.wasm-release.package.photocraft-psd]
 opt-level = "z"
 [profile.wasm-release.package.photocraft-format]
-opt-level = "z"
-[profile.wasm-release.package.photocraft-affinity]
 opt-level = "z"
 [profile.wasm-release.package.serde_json]
 opt-level = "z"

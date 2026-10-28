@@ -61,7 +61,6 @@ pub fn is_enabled(app: &PhotocraftApp, id: &str) -> bool {
         "file.open" | "file.exit" | "file.clearRecent" | "file.removeRecent" | "help.about" | "help.systemInfo" | "edit.search" => true,
         i if i.starts_with("file.openRecent.") => true,
         i if i.starts_with(DOCUMENT_ITEM) => true,
-        i if crate::links::url_for(i).is_some() => true,
         i if i.starts_with("window.theme.") => true,
         // Interface brightness works with or without a document, as in Photoshop.
         "view.darkenInterface" | "view.lightenInterface" => true,
@@ -128,6 +127,9 @@ pub(super) fn checked(app: &PhotocraftApp, id: &str) -> Option<bool> {
         return Some(c);
     }
     if let Some(c) = crate::analysis_ui::checked(app, id).or_else(|| crate::workspace_ui::checked(app, id)).or_else(|| crate::file_ui::checked(app, id)) {
+        return Some(c);
+    }
+    if let Some(c) = crate::closet::checked(app, id) {
         return Some(c);
     }
     if let Some(c) = crate::preset_panels::checked(app, id) {

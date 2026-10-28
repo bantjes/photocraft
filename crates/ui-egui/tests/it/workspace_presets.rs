@@ -15,7 +15,10 @@ const PRESETS: [(&str, &str, &[Group], bool); 6] = [
 ];
 
 fn app() -> PhotocraftApp {
-    PhotocraftApp::new(Session::new(), Default::default())
+    let mut app = PhotocraftApp::new(Session::new(), Default::default());
+    // The Motion workspace lives in Marian PhotoCraft's Basement.
+    app.ui.shell.without_starting_sort = true;
+    app
 }
 
 fn invoke(app: &mut PhotocraftApp, id: &str, params: Value) {

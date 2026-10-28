@@ -14,6 +14,7 @@ macro_rules! tl {
     };
 }
 pub mod canvas;
+pub mod closet;
 pub mod control;
 pub mod dialogs;
 pub mod dock;
@@ -26,6 +27,9 @@ pub mod icons;
 pub mod jobs_ui;
 pub(crate) mod last_brush;
 pub mod links;
+
+/// The app's name wherever it is shown (window title, menu bar, About, start screen).
+pub const DISPLAY_NAME: &str = "Marian PhotoCraft";
 pub mod menu_catalog;
 pub mod menus;
 pub mod monitor_status;
@@ -39,7 +43,6 @@ pub mod texel_guard;
 pub mod theme;
 pub use titlebar::{Caption, CaptionFamily, CaptionIcon, CaptionIcons, CaptionStyle, RenderIconFn};
 pub(crate) mod tool_memory;
-pub mod updates_ui;
 pub mod widgets;
 pub mod work_area;
 
@@ -617,7 +620,6 @@ pub struct PhotocraftApp {
     pub stroke_trace: stroke_trace::StrokeTrace,
     /// Preferences, autosave and snapping runtime state (see `prefs_ui`, `snap_ui`).
     pub(crate) prefs_rt: prefs_ui::Runtime,
-    pub(crate) updates_rt: updates_ui::Runtime,
     /// Close, Revert or Exit parked behind the unsaved-changes prompt (see `discard_ui`).
     pub(crate) discard: Option<discard_ui::Prompt>,
     /// The Open or Save dialog in progress, and the action waiting on it (see `file_dialog`).

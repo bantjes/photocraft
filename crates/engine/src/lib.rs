@@ -154,7 +154,6 @@ pub use cmd::type_extra_cmds;
 pub use cmd::type_mask_cmds;
 pub use cmd::type_spell_cmds;
 pub use cmd::type_styles_cmds;
-pub use cmd::updates_cmds;
 use cmd::variables_cmds;
 pub use cmd::vector_cmds;
 use cmd::video_cmds;
@@ -219,8 +218,6 @@ pub struct Session {
     filter_mask_layer: Option<LayerId>,
     /// Edit › Preferences, keyboard shortcuts, menu and toolbar customisation (see `prefs`).
     pub prefs: prefs::PrefsStore,
-    /// Release checks use an injected platform transport; no network I/O in the engine.
-    pub updates: updates_cmds::Updates,
     /// Edit menu state: Fade source, custom shape library (see `edit_menu_cmds`).
     pub edit_state: edit_menu_cmds::EditState,
     /// The pattern library (Window › Patterns; see `pattern.*`).

@@ -492,7 +492,6 @@ struct PanelSet {
     histogram_refresh: Option<bool>,
     panels: Option<crate::state::Panels>,
     mask_target: Option<bool>,
-    updates_open: Option<bool>,
     vector_mask_target: Option<bool>,
     filter_mask_target: Option<bool>,
     selection_mode: Option<u64>,
@@ -512,7 +511,6 @@ impl PanelSet {
             histogram_refresh: bool_field(p, "histogramRefresh")?,
             panels: merged_object(&app.ui.panels, p.get("panels"), "panels")?,
             mask_target: bool_field(p, "maskTarget")?,
-            updates_open: bool_field(p, "updatesOpen")?,
             vector_mask_target: bool_field(p, "vectorMaskTarget")?,
             filter_mask_target: filter_mask_target_param(app, p)?,
             selection_mode: uint_field(p, "selectionMode")?,
@@ -558,9 +556,6 @@ impl PanelSet {
             app.ui.properties_layer = None;
             app.ui.vector_mask_target &= !m;
             app.sync_mask_targets();
-        }
-        if let Some(open) = self.updates_open {
-            app.ui.updates_open = open;
         }
         if let Some(m) = self.vector_mask_target {
             app.end_filter_mask_view();

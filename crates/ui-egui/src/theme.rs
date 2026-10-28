@@ -52,10 +52,13 @@ pub enum ThemeKind {
     SoftDark,
     /// A low-contrast light theme: pale violet-grey surfaces, softened dark text and a periwinkle accent.
     SoftLight,
+    /// Marian PhotoCraft's own (chosen at its first start): a sky-blue frame, tab strips and toolbar with
+    /// black lettering, pale-blue panels, a neutral grey canvas and the current tool on green.
+    MarianBlue,
 }
 
 impl ThemeKind {
-    pub const ALL: [ThemeKind; 14] = [
+    pub const ALL: [ThemeKind; 15] = [
         ThemeKind::Pro,
         ThemeKind::ProMedium,
         ThemeKind::ProLightGray,
@@ -70,6 +73,7 @@ impl ThemeKind {
         ThemeKind::BreezeDark,
         ThemeKind::SoftDark,
         ThemeKind::SoftLight,
+        ThemeKind::MarianBlue,
     ];
     pub fn label(self) -> &'static str {
         match self {
@@ -87,6 +91,7 @@ impl ThemeKind {
             ThemeKind::BreezeDark => "Breeze Dark",
             ThemeKind::SoftDark => "Soft Dark",
             ThemeKind::SoftLight => "Soft Light",
+            ThemeKind::MarianBlue => "Marian Blue",
         }
     }
     /// The canonical name: `ui.set {theme}` accepts it and the Window › Theme commands are
@@ -107,11 +112,12 @@ impl ThemeKind {
             ThemeKind::BreezeDark => "breezeDark",
             ThemeKind::SoftDark => "softDark",
             ThemeKind::SoftLight => "softLight",
+            ThemeKind::MarianBlue => "marianBlue",
         }
     }
     /// Photoshop-grammar layout (tab strips, flat panels): the four Pro brightness levels.
     pub fn is_pro(self) -> bool {
-        matches!(self, ThemeKind::Pro | ThemeKind::ProMedium | ThemeKind::ProLightGray | ThemeKind::ProLight)
+        matches!(self, ThemeKind::Pro | ThemeKind::ProMedium | ThemeKind::ProLightGray | ThemeKind::ProLight | ThemeKind::MarianBlue)
     }
     /// Whether this theme belongs to the dark appearance family.
     pub fn is_dark(self) -> bool {
@@ -150,6 +156,7 @@ impl ThemeKind {
             "breezedark" | "kdedark" | "plasmadark" => Some(ThemeKind::BreezeDark),
             "softdark" => Some(ThemeKind::SoftDark),
             "softlight" => Some(ThemeKind::SoftLight),
+            "marianblue" | "marian" | "blue" => Some(ThemeKind::MarianBlue),
             _ => None,
         }
     }
@@ -674,6 +681,41 @@ impl Tokens {
                 caption_close_text: Color32::WHITE,
                 scrim: Color32::from_black_alpha(100),
             },
+            // Marian PhotoCraft: sky blue and black, as Marian Vectorcraft is gold and black. The
+            // canvas stays a neutral grey so colours in the picture aren't judged against blue.
+            ThemeKind::MarianBlue => {
+                let hex = |s: u32| Color32::from_rgb((s >> 16) as u8, (s >> 8) as u8, s as u8);
+                Tokens {
+                    kind,
+                    chrome: hex(0x5b9cf0),
+                    canvas: hex(0xc8c8c8),
+                    canvas_dot: hex(0xc8c8c8),
+                    dock: hex(0xc9dcf7),
+                    card: hex(0xe6effc),
+                    card_border: hex(0xa9c4ec),
+                    field: Color32::WHITE,
+                    field_border: hex(0x7fa3d6),
+                    hover: hex(0xcfe0f9),
+                    pressed: hex(0xb5cff4),
+                    text: hex(0x0b1a33),
+                    text_dim: hex(0x24385c),
+                    text_faint: hex(0x4f6386),
+                    icon: hex(0x0b1a33),
+                    accent: hex(0x1f5bd0),
+                    // The current tool (and other chosen buttons): green, with a black icon.
+                    accent_soft: hex(0x4cbb58),
+                    accent_border: hex(0x1e7a2c),
+                    accent_text: hex(0x0b2a10),
+                    separator: hex(0xa9c4ec),
+                    shadow: Color32::from_black_alpha(50),
+                    primary_bg: hex(0x1f5bd0),
+                    primary_text: Color32::WHITE,
+                    tab_strip: hex(0x4a8de6),
+                    row_selected: hex(0xb9d3f6),
+                    histogram_bg: hex(0xdfe3ea),
+                    ..Tokens::for_kind(ThemeKind::ProLight)
+                }
+            }
             // Soft Light: pale violet-grey surfaces, softened dark-violet text (not black) and a
             // periwinkle accent, with the same generous radii as Soft Dark.
             ThemeKind::SoftLight => Tokens {

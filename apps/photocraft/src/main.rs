@@ -4,8 +4,8 @@
 //! declared, with what makes a usage error (exit status 2), in `launch_args`.
 //!
 //! On Windows and Linux a launch hands its files to the PhotoCraft that is already running (new
-//! tabs in its window) and exits; `--new-instance` starts a separate copy instead, as does any
-//! `--control` launch (see `single_instance`).
+//! tabs in its window) and exits; `--new-instance` starts a separate copy instead (see
+//! `single_instance`).
 //!
 //! `--present-mode` (`fifo`, `autovsync`, `novsync`) and `--frame-latency` (1–3) override how
 //! frames reach the display for this launch (`PHOTOCRAFT_PRESENT_MODE` / `…_FRAME_LATENCY`;
@@ -19,9 +19,7 @@
 //! `--in-window-menus` (or `PHOTOCRAFT_IN_WINDOW_MENUS=1`) keeps the menus inside the window on
 //! macOS instead of the macOS menu bar (`mac_menu`).
 //!
-//! `--control <port>` (or `PHOTOCRAFT_CONTROL_PORT`) starts a localhost JSON-lines control server.
-//! The first line must authenticate; subsequent request lines get reply lines.
-//! `{"id":1,"ok":true,"result":…}`. See `photocraft_ui_egui::control` for the methods.
+//! Marian PhotoCraft has no control server: nothing outside the app can drive it.
 
 // Release builds on Windows are GUI-subsystem apps, so launching from the Start Menu or Explorer
 // doesn't open a console window. (`--help`, `--version` and usage errors then only show when
@@ -36,7 +34,6 @@ mod appearance;
 mod apple_events;
 mod caps_lock;
 mod caption_style;
-mod control_server;
 mod crash_guard;
 mod cursor;
 mod file_dialog_probe;
@@ -69,7 +66,6 @@ mod single_instance;
 // Tablet support (macOS AppKit monitor, Linux X11/Wayland, Windows barrel button).
 mod tablet;
 mod ui_state;
-mod updates;
 mod window_frame;
 
 use photocraft_engine::Session;
@@ -92,53 +88,6 @@ fn custom_titlebar(prefs_file: Option<&std::path::Path>) -> bool {
     CUSTOM_TITLEBAR && !prefs.interface.system_title_bar
 }
 
-/// Preferences › Integrations, read before the window opens the way [`custom_titlebar`] is:
-/// whether agents may drive this launch at all, and the port to listen on when no `--control`
-/// was given (0 = only with `--control`). A missing or unreadable file keeps the defaults.
-///
-/// The section is read on its own, and when it doesn't read as a whole each value on its own,
-/// as the app's lenient load reads them (#6611): a wrong-typed value elsewhere in the file, or
-/// in the other field, must not turn Allow Agent Control back on while the dialog shows it off.
-fn integrations(prefs_file: Option<&std::path::Path>) -> photocraft_engine::prefs::Integrations {
-    use serde_json::Value;
-    let mut out = photocraft_engine::prefs::Preferences::default().integrations;
-    let file: Option<Value> = prefs_file.and_then(|p| std::fs::read_to_string(p).ok()).and_then(|t| serde_json::from_str(&t).ok());
-    let Some(section) = file.as_ref().and_then(|v| v.get("integrations")) else {
-        return out;
-    };
-    if let Ok(whole) = serde_json::from_value(section.clone()) {
-        return whole;
-    }
-    if let Some(allow) = section.get("allowAgentControl").and_then(Value::as_bool) {
-        out.allow_agent_control = allow;
-    }
-    if let Some(port) = section.get("controlPort").and_then(Value::as_u64).and_then(|p| u32::try_from(p).ok()) {
-        out.control_port = port;
-    }
-    out
-}
-
-/// The control port this launch listens on, and the warning to print when a request was refused.
-/// `--control` (or `PHOTOCRAFT_CONTROL_PORT`) wins over the preference; Allow Agent Control off
-/// refuses both, and says so rather than ignoring the flag silently. A preferred port outside
-/// 1..=65535 is refused the same way.
-fn control_port_for(cli: Option<u16>, prefs: &photocraft_engine::prefs::Integrations) -> (Option<u16>, Option<String>) {
-    if !prefs.allow_agent_control {
-        let warning = cli.map(|p| format!("photocraft: Preferences › Integrations › Allow Agent Control is off: not listening on port {p}\n"));
-        return (None, warning);
-    }
-    if let Some(port) = cli {
-        return (Some(port), None);
-    }
-    match prefs.control_port {
-        0 => (None, None),
-        p => match u16::try_from(p).ok().filter(|p| *p != 0) {
-            Some(port) => (Some(port), None),
-            None => (None, Some(format!("photocraft: Preferences › Integrations › Control Port {p} is not a usable port: not listening\n"))),
-        },
-    }
-}
-
 /// The main window: 1440 × 900 (shrunk to fit the monitor, and maximized on the first frame
 /// when it still doesn't fit, `work_area::fit_window`), centred on the main monitor. Without
 /// `centered`, Windows cascades each new window from the top-left corner, so it opened at a
@@ -149,7 +98,7 @@ fn native_options(custom_titlebar: bool) -> eframe::NativeOptions {
     eframe::NativeOptions {
         viewport: viewport
             .with_app_id(APP_ID)
-            .with_title("PhotoCraft")
+            .with_title(photocraft_ui_egui::DISPLAY_NAME)
             .with_inner_size([1440.0, 900.0])
             .with_min_inner_size([760.0, 480.0])
             .with_drag_and_drop(true)
@@ -280,42 +229,6 @@ fn linux_display_session() -> linux_libs::DisplaySession {
     session
 }
 
-/// The control server's port, token and workspace, when it is on (exits 2 on a bad configuration).
-fn control_setup(
-    cli_port: Option<u16>,
-    auth: photocraft_automation::args::ControlArgs,
-    automation: &photocraft_automation::args::AutomationArgs,
-) -> Option<(u16, String, photocraft_automation::workspace::AuthorizedWorkspace)> {
-    let (port, warning) = control_port_for(cli_port, &integrations(services::prefs_file().as_deref()));
-    if let Some(warning) = &warning {
-        eprint!("{warning}");
-    }
-    let port = port?;
-    let (supplied, token_file) = (auth.control_token, auth.control_token_file);
-    let token = match photocraft_automation::security::server_token(supplied.as_deref(), token_file.as_deref()) {
-        Ok(token) => token,
-        Err(e) => {
-            eprintln!("photocraft: cannot configure control authentication: {e}");
-            std::process::exit(2);
-        }
-    };
-    if let Some(path) = token_file {
-        eprintln!("photocraft: control token file: {}", path.display());
-    } else if supplied.is_none() {
-        eprintln!("photocraft: control token: {token}");
-    } else {
-        eprintln!("photocraft: using supplied control token");
-    }
-    let workspace = match automation.workspace() {
-        Ok(workspace) => workspace,
-        Err(error) => {
-            eprintln!("photocraft: cannot configure automation workspace: {error}");
-            std::process::exit(2);
-        }
-    };
-    Some((port, token, workspace))
-}
-
 /// Record this start's backend in the GPU startup marker, if the marker is locked.
 fn write_start_marker(sentinel: &gpu_startup::SharedSentinel, plan: &gpu_startup::Plan) {
     if let Some(s) = sentinel.lock().unwrap_or_else(std::sync::PoisonError::into_inner).as_mut() {
@@ -334,15 +247,6 @@ fn main() -> eframe::Result {
     // First, so the panic hook and every start-up warning are recorded (`logging`).
     let logger = logging::install();
     crash_guard::install_hook();
-    #[cfg(not(target_arch = "wasm32"))]
-    if let Some(done) = craft_update::self_update::finish(&craft_update::suite::PHOTOCRAFT, &std::env::args_os().skip(1).collect::<Vec<_>>()) {
-        if let Err(e) = done {
-            eprintln!("PhotoCraft update helper failed: {e}");
-            std::process::exit(1);
-        }
-        return Ok(());
-    }
-
     // The system font scan can take seconds (minutes on some Macs): run it off the UI thread.
     photocraft_ui_egui::type_tool::warm_fonts();
     // `--help` and `--version` print to standard output and exit 0. A usage error (an unknown
@@ -351,19 +255,7 @@ fn main() -> eframe::Result {
     // panics when the stream is closed or a pipe (`photocraft --help | head -1`).
     let launch = launch_args::parse(launch_args::command(), std::env::args_os().skip(1)).unwrap_or_else(|e| e.exit());
     let launch_args::FileNames { openable: files, unreadable: unreadable_paths } = launch.file_names();
-    let launch_args::LaunchArgs {
-        files: _,
-        safe_gpu,
-        in_window_menus,
-        new_instance,
-        present_mode,
-        frame_latency,
-        stroke_trace,
-        control: control_port,
-        auth,
-        automation,
-        mut launch_options,
-    } = launch;
+    let launch_args::LaunchArgs { files: _, safe_gpu, in_window_menus, new_instance, present_mode, frame_latency, stroke_trace, mut launch_options } = launch;
 
     attach_log_file(logger);
 
@@ -376,7 +268,7 @@ fn main() -> eframe::Result {
     // become tabs in its window. Lives until the event loop returns, then `shutdown` lets the next
     // launch become the primary.
     #[cfg(not(target_os = "macos"))]
-    let single_instance = match claim_single_instance(&files, new_instance, control_port.is_some(), !unreadable_paths.is_empty(), launch_options) {
+    let single_instance = match claim_single_instance(&files, new_instance, false, !unreadable_paths.is_empty(), launch_options) {
         std::ops::ControlFlow::Break(()) => return Ok(()),
         std::ops::ControlFlow::Continue(primary) => primary,
     };
@@ -390,7 +282,6 @@ fn main() -> eframe::Result {
     #[cfg(target_os = "linux")]
     let session = linux_display_session();
 
-    let control = control_setup(control_port, auth, &automation);
     // Finder / Dock / Open With deliver files as Apple events, not arguments; catch the one that
     // launched us as well as later ones. Lives until the event loop returns.
     #[cfg(target_os = "macos")]
@@ -477,12 +368,11 @@ fn main() -> eframe::Result {
     let created_in_callback = app_created.clone();
     let started_sentinel = sentinel.clone();
     let result = eframe::run_native(
-        "PhotoCraft",
+        photocraft_ui_egui::DISPLAY_NAME,
         options,
         Box::new(move |cc| {
             created_in_callback.store(true, std::sync::atomic::Ordering::Relaxed);
-            let automation = control.as_ref().map(|(_, _, workspace)| workspace.clone());
-            let mut services = services::native(automation);
+            let mut services = services::native();
             services.preset_store = presets;
             #[cfg(target_os = "linux")]
             let display = tablet::DisplayKind::of(cc);
@@ -599,10 +489,6 @@ fn main() -> eframe::Result {
                     log::warn!("couldn't remember GPU backend {}: {e}", b.name());
                 }
             });
-            if let Some((port, token, _)) = control {
-                let rx = control_server::start(port, token, cc.egui_ctx.clone());
-                app = app.with_control(rx);
-            }
             #[cfg(target_os = "macos")]
             {
                 app.services.os_events = Some(apple_events.connect(&cc.egui_ctx));
@@ -922,91 +808,6 @@ mod tests {
         if super::CUSTOM_TITLEBAR {
             assert_eq!(super::native_options(true).viewport.decorations, Some(false));
         }
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn integrations_preferences_decide_the_control_port() {
-        use photocraft_engine::prefs::Integrations;
-        let off = Integrations { allow_agent_control: false, control_port: 0 };
-        let on = Integrations { allow_agent_control: true, control_port: 0 };
-        let preferred = Integrations { allow_agent_control: true, control_port: 7878 };
-
-        // Nothing asked for, nothing listening.
-        assert_eq!(super::control_port_for(None, &on), (None, None));
-        // --control wins over the preference.
-        assert_eq!(super::control_port_for(Some(9000), &preferred), (Some(9000), None));
-        // The preference opens the port when --control is absent.
-        assert_eq!(super::control_port_for(None, &preferred), (Some(7878), None));
-
-        // Allow Agent Control off refuses both, and says so when --control asked for one
-        // rather than ignoring the flag.
-        assert_eq!(super::control_port_for(None, &off), (None, None));
-        let (port, warning) = super::control_port_for(Some(9000), &off);
-        assert_eq!(port, None);
-        assert!(warning.is_some_and(|w| w.contains("Allow Agent Control") && w.contains("9000")), "the refusal names the port");
-        let off_with_port = Integrations { allow_agent_control: false, control_port: 7878 };
-        assert_eq!(super::control_port_for(None, &off_with_port), (None, None), "off beats a preferred port");
-
-        // A port a hand-edited file could hold, outside 1..=65535, is refused and named.
-        let huge = Integrations { allow_agent_control: true, control_port: 70_000 };
-        let (port, warning) = super::control_port_for(None, &huge);
-        assert_eq!(port, None);
-        assert!(warning.is_some_and(|w| w.contains("70000")), "the refusal names the value");
-    }
-
-    #[test]
-    fn integrations_fall_back_to_the_defaults_without_a_readable_file() {
-        let dir = std::env::temp_dir().join(format!("pc-integrations-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let file = dir.join("prefs.json");
-        let default = photocraft_engine::prefs::Integrations::default();
-
-        assert_eq!(super::integrations(None), default, "no preferences file");
-        std::fs::write(&file, "not json").unwrap();
-        assert_eq!(super::integrations(Some(&file)), default, "an unreadable file");
-        std::fs::write(&file, r#"{"integrations":{"allowAgentControl":false,"controlPort":7878}}"#).unwrap();
-        let read = super::integrations(Some(&file));
-        assert!(!read.allow_agent_control);
-        assert_eq!(read.control_port, 7878);
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    /// The app loads preferences leniently (#6611): one wrong-typed value resets only itself. So
-    /// a bad value elsewhere, or in the port, must not turn Allow Agent Control back on.
-    #[test]
-    fn a_bad_value_elsewhere_keeps_agent_control_off() {
-        let dir = std::env::temp_dir().join(format!("pc-integrations-lenient-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let file = dir.join("prefs.json");
-        // What the Preferences dialog shows for the same file.
-        let shown = |text: &str| {
-            let mut session = photocraft_engine::Session::new();
-            session.load_prefs_json(text).unwrap();
-            session.prefs().integrations.clone()
-        };
-        let read = |text: &str| {
-            std::fs::write(&file, text).unwrap();
-            let read = super::integrations(Some(&file));
-            assert_eq!(read, shown(text), "{text}");
-            read
-        };
-
-        let r = read(r#"{"interface":{"enableAnimations":"nope"},"integrations":{"allowAgentControl":false,"controlPort":7878}}"#);
-        assert!(!r.allow_agent_control, "a bad value in another section");
-        assert_eq!(r.control_port, 7878);
-        let r = read(r#"{"integrations":{"allowAgentControl":false,"controlPort":"x"}}"#);
-        assert!(!r.allow_agent_control, "a bad port");
-        assert_eq!(r.control_port, 0, "the bad port alone takes its default");
-        // A bad Allow Agent Control alone takes its default.
-        let r = read(r#"{"integrations":{"allowAgentControl":"no","controlPort":7878}}"#);
-        assert_eq!(r, photocraft_engine::prefs::Integrations { allow_agent_control: true, control_port: 7878 });
-        read(r#"{"integrations":{"allowAgentControl":false,"controlPort":-1}}"#);
-        read(r#"{"integrations":{"allowAgentControl":false,"controlPort":4294967296}}"#);
-        read(r#"{"integrations":"off"}"#);
-        // serde reads a struct from a list too; the app does.
-        assert!(!read(r#"{"integrations":[false]}"#).allow_agent_control, "a list");
-        assert_eq!(read(r#"{"integrations":[false,7878]}"#).control_port, 7878);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

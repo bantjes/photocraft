@@ -874,14 +874,18 @@ fn handle_escape_and_view_keys(app: &mut PhotocraftApp, ctx: &egui::Context) {
 fn select_tool_by_key(app: &mut PhotocraftApp, ctx: &egui::Context, pressed: &impl Fn(Key) -> bool) -> bool {
     let shift_switch = app.session.prefs().tools.use_shift_key_for_tool_switch;
     for t in Tool::ALL {
-        if !crate::tool_shortcuts::uses_default(app, t) {
+        if !crate::tool_shortcuts::uses_default(app, t) || crate::closet::tool_hidden(app, t) {
             continue;
         }
         let Some(k) = crate::spring_tools::key_of(t.key()) else { continue };
         let cycle_shift = shift_switch && ctx.input_mut(|i| i.consume_key(Modifiers::SHIFT, k));
         if cycle_shift || pressed(k) {
             let before = app.ui.tool;
-            let group: Vec<Tool> = Tool::ALL.iter().copied().filter(|x| x.key() == t.key() && crate::tool_shortcuts::uses_default(app, *x)).collect();
+            let group: Vec<Tool> = Tool::ALL
+                .iter()
+                .copied()
+                .filter(|x| x.key() == t.key() && crate::tool_shortcuts::uses_default(app, *x) && !crate::closet::tool_hidden(app, *x))
+                .collect();
             app.ui.tool = match group.iter().position(|x| *x == app.ui.tool) {
                 Some(i) if shift_switch && !cycle_shift => group[i],
                 Some(i) => group[(i + 1) % group.len()],

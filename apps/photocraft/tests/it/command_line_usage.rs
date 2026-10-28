@@ -4,22 +4,14 @@
 //!
 //! These run the real binary, and every case must exit before the window opens: Windows and
 //! macOS runners have a desktop, so a launch that gets that far hangs until the test times out.
-//! Cases whose arguments are valid add a usage error before them: `--control-token` with
-//! `--control-token-file` is only checked once every argument is read (and only with `--control`),
-//! so stderr shows how the other arguments were taken.
+//! Cases whose arguments are valid add a bad value before them: clap reports a bad value only
+//! once the arguments after it read without an error, so stderr shows how they were taken.
 
 /// The variables the command line reads: a test that wants one sets it.
-const VARS: [&str; 6] = [
-    "PHOTOCRAFT_CONTROL_PORT",
-    "PHOTOCRAFT_CONTROL_TOKEN",
-    "PHOTOCRAFT_CONTROL_TOKEN_FILE",
-    "PHOTOCRAFT_AUTOMATION_READ_ROOT",
-    "PHOTOCRAFT_AUTOMATION_WRITE_ROOT",
-    "PHOTOCRAFT_IN_WINDOW_MENUS",
-];
+const VARS: [&str; 1] = ["PHOTOCRAFT_IN_WINDOW_MENUS"];
 
-/// A usage error found only after every argument is read.
-const LATE_ERROR: [&str; 6] = ["--control", "0", "--control-token", "abcd", "--control-token-file", "token"];
+/// A usage error reported only after every later argument is read.
+const LATE_ERROR: [&str; 2] = ["--frame-latency", "9"];
 
 /// How a run of `photocraft` ended.
 struct Run {
@@ -59,7 +51,7 @@ fn run_photocraft(args: &[&str]) -> Run {
 fn late_error(args: &[&str], vars: &[(&str, &str)]) -> String {
     let Run { status, stdout, stderr } = run_with(&[&LATE_ERROR[..], args].concat(), vars);
     assert_eq!(status.code(), Some(2), "{args:?}: {stderr}");
-    assert!(stderr.contains("cannot be used with"), "{args:?}: {stderr}");
+    assert!(stderr.contains("invalid value '9' for '--frame-latency <1-3>'"), "{args:?}: {stderr}");
     assert!(stdout.is_empty(), "{args:?}: {stdout}");
     stderr
 }
@@ -70,7 +62,7 @@ fn help_prints_usage_and_exits_0() {
         let Run { status, stdout, stderr } = run_photocraft(&[flag]);
         assert_eq!(status.code(), Some(0), "{flag} must exit 0, stderr: {stderr}");
         assert!(stdout.contains("Usage: photocraft"), "{flag} stdout: {stdout}");
-        for option in ["--safe-gpu", "--new-instance", "--control <PORT>", "--version", "`--`", "PHOTOCRAFT_AUTOMATION_READ_ROOT", "PHOTOCRAFT_NEW_INSTANCE"] {
+        for option in ["--safe-gpu", "--new-instance", "--frame-latency <1-3>", "--version", "`--`", "PHOTOCRAFT_NEW_INSTANCE"] {
             assert!(stdout.contains(option), "{flag} usage must list {option}: {stdout}");
         }
         assert!(!stderr.contains("Couldn't open"), "{flag} was taken as a file: {stderr}");
@@ -98,8 +90,8 @@ fn unknown_options_exit_2_naming_them() {
         (&["-x"][..], "unexpected argument '-x'"),
         (&["--help=yes"][..], "unexpected value 'yes' for '--help'"),
         // An unknown flag after a bad value is reported first: clap drops the pending value's error.
-        (&["--control", "nope", "--safegpu"][..], "unexpected argument '--safegpu'"),
-        (&["--control", "nope"][..], "invalid value 'nope' for '--control <PORT>'"),
+        (&["--frame-latency", "nope", "--safegpu"][..], "unexpected argument '--safegpu'"),
+        (&["--frame-latency", "nope"][..], "invalid value 'nope' for '--frame-latency <1-3>'"),
     ] {
         let Run { status, stdout, stderr } = run_photocraft(args);
         assert_eq!(status.code(), Some(2), "{args:?} must be a usage error, stderr: {stderr}");
@@ -128,30 +120,4 @@ fn macos_process_serial_number_is_still_ignored() {
 fn new_instance_is_a_known_option() {
     let stderr = late_error(&["--new-instance"], &[]);
     assert!(!stderr.contains("unexpected"), "stderr: {stderr}");
-}
-
-/// The variables stand in for their flags: a flag wins, an empty variable counts as unset, a bad
-/// value is a usage error naming the variable, and a flag without its value is still an error
-/// when its variable is set (#6429).
-#[test]
-fn variables_are_the_flags_fallbacks() {
-    let Run { status, stderr, .. } = run_with(&[], &[("PHOTOCRAFT_CONTROL_PORT", "nope")]);
-    assert_eq!(status.code(), Some(2), "stderr: {stderr}");
-    assert!(stderr.contains("invalid value 'nope' for 'PHOTOCRAFT_CONTROL_PORT'"), "stderr: {stderr}");
-    // With the flag (in LATE_ERROR), the variable is never read.
-    let stderr = late_error(&[], &[("PHOTOCRAFT_CONTROL_PORT", "nope")]);
-    assert!(!stderr.contains("PHOTOCRAFT_CONTROL_PORT"), "stderr: {stderr}");
-    // The variable turns the control server on as the flag does, so the token pair is checked.
-    let Run { status, stderr, .. } = run_with(&LATE_ERROR[2..], &[("PHOTOCRAFT_CONTROL_PORT", "0")]);
-    assert_eq!(status.code(), Some(2), "stderr: {stderr}");
-    assert!(stderr.contains("cannot be used with"), "stderr: {stderr}");
-    let Run { status, stderr, .. } = run_with(&["--automation-read-root"], &[("PHOTOCRAFT_AUTOMATION_READ_ROOT", "/env/read")]);
-    assert_eq!(status.code(), Some(2), "stderr: {stderr}");
-    assert!(stderr.contains("a value is required for '--automation-read-root <DIR>'"), "stderr: {stderr}");
-    // The other half of the token pair from a variable is the same either/or error, naming it
-    // but never showing the token.
-    let token = "a".repeat(64);
-    let Run { status, stderr, .. } = run_with(&["--control", "0", "--control-token-file", "token"], &[("PHOTOCRAFT_CONTROL_TOKEN", token.as_str())]);
-    assert_eq!(status.code(), Some(2), "stderr: {stderr}");
-    assert!(stderr.contains("PHOTOCRAFT_CONTROL_TOKEN") && stderr.contains("cannot be used with") && !stderr.contains(&token), "stderr: {stderr}");
 }

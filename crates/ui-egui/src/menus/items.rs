@@ -181,19 +181,6 @@ pub fn menu_items(app: &PhotocraftApp) -> Vec<MenuItem> {
             items.insert(after + 1 + k, it);
         }
     }
-    // Keep the update command with the links, ahead of System Info and About.
-    if let Some(at) = items.iter().position(|i| i.id == "help.checkForUpdates") {
-        let update = items.remove(at);
-        let before = items.iter().position(|i| i.id == "help.systemInfo" || i.id == "help.about").unwrap_or(items.len());
-        items.insert(before, update);
-    }
-    // Help: the link items and update check, a separator, then System Info and About.
-    if let Some(at) = items.iter().position(|i| i.id == "help.systemInfo" || i.id == "help.about") {
-        items.insert(
-            at,
-            MenuItem { id: "---".into(), label: "---".into(), path: vec!["Help".into()], shortcut: None, enabled: false, checked: None, color: None },
-        );
-    }
     // Window: the open documents in tab order, after a separator, the active one checked.
     if let Some(last) = items.iter().rposition(|i| i.path.first().map(String::as_str) == Some("Window")) {
         let window = || vec!["Window".to_string()];
@@ -225,6 +212,8 @@ pub fn menu_items(app: &PhotocraftApp) -> Vec<MenuItem> {
     if !prefs.menus.hidden.is_empty() {
         items.retain(|i| !prefs.menus.is_hidden(&i.id));
     }
+    // Window › Closet…: what is put away leaves its menu.
+    crate::closet::prune_menu(app, &mut items);
     if prefs.interface.show_menu_colors {
         for it in &mut items {
             it.color = prefs.menus.colors.get(&it.id).cloned();

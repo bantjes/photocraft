@@ -2,9 +2,6 @@
 
 mod adjust_blend_roundtrip;
 mod adjust_warnings;
-mod affinity;
-mod affinity_artboards;
-mod affinity_corpus;
 mod annotations;
 mod artboard_guide_order;
 mod banded;

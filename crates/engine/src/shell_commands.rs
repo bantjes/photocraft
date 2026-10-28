@@ -65,6 +65,11 @@ pub const SHELL_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("window.toggle.brushes", "Brushes", &["Window"], None),
     ("window.toggle.navigator", "Navigator", &["Window"], None),
     ("window.toggle.toolbar", "Tools", &["Window"], None),
+    // Window › Closet… (Marian PhotoCraft): put tools, panels and menu items away and back.
+    ("window.closet", "Closet…", &["Window"], None),
+    ("closet.set", "Move to Closet or Basement", &[], None),
+    ("closet.reset", "Restore Starting Sort", &[], None),
+    ("closet.list", "List Closet and Basement", &[], None),
     // Photoshop's Tab and ⇧Tab: all panels (Tools, options bar and the dock), or only the dock.
     ("window.togglePanels", "Show/Hide All Panels", &[], Some("Tab")),
     ("window.toggle.dock", "Show/Hide Panels", &[], Some("Shift+Tab")),
@@ -87,15 +92,11 @@ pub const SHELL_COMMANDS: &[(&str, &str, &[&str], Option<&str>)] = &[
     ("window.theme.adwaita", "Adwaita", &["Window", "Theme", "Light Theme"], None),
     ("window.theme.breezeLight", "Breeze", &["Window", "Theme", "Light Theme"], None),
     ("window.theme.softLight", "Soft", &["Window", "Theme", "Light Theme"], None),
+    ("window.theme.marianBlue", "Marian Blue", &["Window", "Theme", "Light Theme"], None),
     ("window.theme.system", "Sync with system", &["Window", "Theme"], None),
     ("edit.search", "Search…", &["Edit"], Some("Cmd+F")),
-    ("help.discord", "Join the ArtCraft Discord…", &["Help"], None),
-    ("help.website", "PhotoCraft Website", &["Help"], None),
-    ("help.artcraftWebsite", "ArtCraft Website", &["Help"], None),
-    ("help.github", "PhotoCraft on GitHub", &["Help"], None),
-    ("help.reportIssue", "Report an Issue…", &["Help"], None),
     ("help.systemInfo", "System Info…", &["Help"], None),
-    ("help.about", "About PhotoCraft", &["Help"], None),
+    ("help.about", "About Marian PhotoCraft", &["Help"], None),
 ];
 
 /// The tools, in toolbar order: shortcut id (`tools.select.<tool>`), Photoshop's name for it

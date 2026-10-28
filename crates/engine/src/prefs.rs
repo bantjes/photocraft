@@ -56,10 +56,10 @@ choice!(TypeUnit { Points = "points", Pixels = "pixels", Millimeters = "mm" } de
 choice!(PointSize { PostScript = "postScript", Traditional = "traditional" } default PostScript);
 choice!(Interpolation { BicubicAutomatic = "bicubicAutomatic", Nearest = "nearestNeighbor", Bilinear = "bilinear", Bicubic = "bicubic", BicubicSmoother = "bicubicSmoother", BicubicSharper = "bicubicSharper", PreserveDetails = "preserveDetails" } default BicubicAutomatic);
 choice!(ColorPicker { Adobe = "adobe", System = "system" } default Adobe);
-choice!(Theme { Pro = "pro", ProMedium = "proMedium", ProLightGray = "proLightGray", ProLight = "proLight", Studio = "studio", StudioLight = "studioLight", Classic = "classic", SolarizedDark = "solarizedDark", Adwaita = "adwaita", AdwaitaDark = "adwaitaDark", BreezeLight = "breezeLight", BreezeDark = "breezeDark", SoftDark = "softDark", SoftLight = "softLight" } default ProMedium);
+choice!(Theme { Pro = "pro", ProMedium = "proMedium", ProLightGray = "proLightGray", ProLight = "proLight", Studio = "studio", StudioLight = "studioLight", Classic = "classic", SolarizedDark = "solarizedDark", Adwaita = "adwaita", AdwaitaDark = "adwaitaDark", BreezeLight = "breezeLight", BreezeDark = "breezeDark", SoftDark = "softDark", SoftLight = "softLight", MarianBlue = "marianBlue" } default ProMedium);
 choice!(AppearanceMode { Auto = "auto", Dark = "dark", Light = "light" } default Dark);
 choice!(DarkTheme { Pro = "pro", ProMedium = "proMedium", Studio = "studio", SolarizedDark = "solarizedDark", AdwaitaDark = "adwaitaDark", BreezeDark = "breezeDark", SoftDark = "softDark" } default ProMedium);
-choice!(LightTheme { ProLight = "proLight", ProLightGray = "proLightGray", StudioLight = "studioLight", Classic = "classic", Adwaita = "adwaita", BreezeLight = "breezeLight", SoftLight = "softLight" } default ProLight);
+choice!(LightTheme { ProLight = "proLight", ProLightGray = "proLightGray", StudioLight = "studioLight", Classic = "classic", Adwaita = "adwaita", BreezeLight = "breezeLight", SoftLight = "softLight", MarianBlue = "marianBlue" } default ProLight);
 choice!(CanvasColor { Default = "default", Black = "black", DarkGray = "darkGray", MediumGray = "mediumGray", LightGray = "lightGray", Custom = "custom" } default Default);
 choice!(CanvasBorder { DropShadow = "dropShadow", Line = "line", None = "none" } default DropShadow);
 choice!(UiScale { Auto = "auto", P75 = "75", P80 = "80", P85 = "85", P90 = "90", P95 = "95", P100 = "100", P105 = "105", P110 = "110", P115 = "115", P120 = "120", P125 = "125", P150 = "150", P175 = "175", P200 = "200", P250 = "250", P300 = "300" } default Auto);
@@ -229,7 +229,8 @@ pub struct General {
     pub zoom_resizes_windows: bool,
     pub use_legacy_free_transform: bool,
     pub auto_show_home_screen: bool,
-    /// Desktop: check published stable releases once in the background at launch.
+    /// Marian PhotoCraft never checks for updates: kept (always off, not shown) so older settings
+    /// files still load.
     pub automatically_check_updates: bool,
 }
 
@@ -247,7 +248,7 @@ impl Default for General {
             zoom_resizes_windows: false,
             use_legacy_free_transform: false,
             auto_show_home_screen: true,
-            automatically_check_updates: true,
+            automatically_check_updates: false,
         }
     }
 }
@@ -311,6 +312,8 @@ pub struct Interface {
 impl Default for Interface {
     fn default() -> Self {
         Self {
+            // Marian PhotoCraft's first start chooses its blue look (the app's `app_dirs`), so
+            // these stay PhotoCraft's.
             theme: Theme::ProMedium,
             appearance_mode: AppearanceMode::Dark,
             dark_theme: DarkTheme::ProMedium,
@@ -988,19 +991,13 @@ impl Default for RawDefaults {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Integrations {
-    /// Allow agents to drive the app over the loopback control channel / MCP bridge.
+    /// Marian PhotoCraft has no control channel: kept only so older settings files still load.
     pub allow_agent_control: bool,
     /// Default control port (0 = only when `--control` is given).
     pub control_port: u32,
-}
-
-impl Default for Integrations {
-    fn default() -> Self {
-        Self { allow_agent_control: true, control_port: 0 }
-    }
 }
 
 /// The History panel's History Options… (not part of Edit › Preferences in Photoshop either).
@@ -1164,6 +1161,10 @@ pub struct Preferences {
     pub script_events: crate::automate_cmds::ScriptEvents,
     /// Layer Mask Display Options: the layer mask rubylith's colour and opacity.
     pub layer_mask_overlay: LayerMaskOverlay,
+    /// Window › Closet…: where tools, panels and menu items were moved since the build's starting
+    /// sort, key (`tool:<name>`, `panel:<id>`, `menu:<id>`, `submenu:<path>`) → shelf (`inUse`,
+    /// `closet`, `basement`). JSON owned by the shell.
+    pub closet: BTreeMap<String, String>,
 }
 
 impl Preferences {
@@ -1366,9 +1367,14 @@ impl Session {
                 Theme::Pro | Theme::ProMedium | Theme::Studio | Theme::SolarizedDark | Theme::AdwaitaDark | Theme::BreezeDark | Theme::SoftDark => {
                     ("dark", "darkTheme")
                 }
-                Theme::StudioLight | Theme::ProLightGray | Theme::ProLight | Theme::Classic | Theme::Adwaita | Theme::BreezeLight | Theme::SoftLight => {
-                    ("light", "lightTheme")
-                }
+                Theme::StudioLight
+                | Theme::ProLightGray
+                | Theme::ProLight
+                | Theme::Classic
+                | Theme::Adwaita
+                | Theme::BreezeLight
+                | Theme::SoftLight
+                | Theme::MarianBlue => ("light", "lightTheme"),
             };
             interface.insert("appearanceMode".into(), json!(mode));
             // A partially migrated file may already contain a newer theme selection (#5139).
@@ -1508,6 +1514,10 @@ impl Session {
                 }
                 Theme::SoftLight => {
                     next.interface.light_theme = LightTheme::SoftLight;
+                    next.interface.appearance_mode = AppearanceMode::Light;
+                }
+                Theme::MarianBlue => {
+                    next.interface.light_theme = LightTheme::MarianBlue;
                     next.interface.appearance_mode = AppearanceMode::Light;
                 }
             }

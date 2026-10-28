@@ -5,19 +5,16 @@
 //! fall back to a generated token or to no root (#6429), a repeated flag, and a bad
 //! `--present-mode` or `--frame-latency`. A value never starts with `-` (write `--opt=-value`),
 //! except for negative numbers, and a file whose name starts with `-` goes after `--`.
-//!
-//! The control and automation flags are `photocraft-automation`'s, shared with `photocraft-cli`.
-//! Only the desktop app reads the automation roots from `PHOTOCRAFT_AUTOMATION_*_ROOT` (#1551).
 
 use std::ffi::OsString;
 use std::fmt;
 use std::path::PathBuf;
 
 use clap::builder::FalseyValueParser;
+use clap::error::{ContextKind, ContextValue};
 use clap::parser::ValueSource;
-use clap::{Command, CommandFactory, FromArgMatches, Parser};
+use clap::{Arg, Command, CommandFactory, FromArgMatches, Parser};
 use eframe::wgpu::PresentMode;
-use photocraft_automation::args::{AutomationArgs, ControlArgs, blank_env_is_unset, conflict, control_port, name_env_vars};
 
 use crate::presentation;
 
@@ -51,13 +48,6 @@ pub(crate) struct LaunchArgs {
     /// records every frame. Without it, PHOTOCRAFT_STROKE_TRACE
     #[arg(long, value_name = "stderr|FILE.csv")]
     pub(crate) stroke_trace: Option<String>,
-    /// Start the localhost JSON-lines control server on this port
-    #[arg(long, value_name = "PORT", env = "PHOTOCRAFT_CONTROL_PORT", value_parser = control_port, allow_negative_numbers = true)]
-    pub(crate) control: Option<u16>,
-    #[command(flatten)]
-    pub(crate) auth: ControlArgs,
-    #[command(flatten)]
-    pub(crate) automation: AutomationArgs,
     /// The per-process options given on the command line, set by [`parse`].
     #[arg(skip)]
     pub(crate) launch_options: Vec<PerProcess>,
@@ -72,8 +62,6 @@ Environment: PHOTOCRAFT_NEW_INSTANCE (anything but 0 or empty: as --new-instance
 /// flag, or the variable.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum PerProcess {
-    AutomationReadRoot,
-    AutomationWriteRoot,
     SafeGpu,
     InWindowMenus,
     PresentMode,
@@ -87,14 +75,11 @@ impl PerProcess {
     /// The flags, in the order a log line lists them. A flag's variable asks for the same thing, so
     /// it counts too (#7242); the variables that aren't a flag's fallback are counted by
     /// `single_instance::env_launch_options`.
-    pub(crate) const FLAGS: [PerProcess; 7] =
-        [Self::AutomationReadRoot, Self::AutomationWriteRoot, Self::SafeGpu, Self::InWindowMenus, Self::PresentMode, Self::FrameLatency, Self::StrokeTrace];
+    pub(crate) const FLAGS: [PerProcess; 5] = [Self::SafeGpu, Self::InWindowMenus, Self::PresentMode, Self::FrameLatency, Self::StrokeTrace];
 
     /// The flag's clap argument id.
     fn id(self) -> Option<&'static str> {
         Some(match self {
-            Self::AutomationReadRoot => "automation_read_root",
-            Self::AutomationWriteRoot => "automation_write_root",
             Self::SafeGpu => "safe_gpu",
             Self::InWindowMenus => "in_window_menus",
             Self::PresentMode => "present_mode",
@@ -108,8 +93,6 @@ impl PerProcess {
 impl fmt::Display for PerProcess {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
-            Self::AutomationReadRoot => "--automation-read-root",
-            Self::AutomationWriteRoot => "--automation-write-root",
             Self::SafeGpu => "--safe-gpu",
             Self::InWindowMenus => "--in-window-menus",
             Self::PresentMode => "--present-mode",
@@ -143,13 +126,32 @@ impl LaunchArgs {
     }
 }
 
-/// The command line, with the desktop app's variables for the automation roots. An empty or blank
-/// variable counts as unset.
+/// The command line. An empty or blank variable counts as unset.
 pub(crate) fn command() -> Command {
-    LaunchArgs::command()
-        .mut_arg("automation_read_root", |a| a.env("PHOTOCRAFT_AUTOMATION_READ_ROOT"))
-        .mut_arg("automation_write_root", |a| a.env("PHOTOCRAFT_AUTOMATION_WRITE_ROOT"))
-        .mut_args(blank_env_is_unset)
+    LaunchArgs::command().mut_args(blank_env_is_unset)
+}
+
+/// For `Command::mut_args`: an empty or blank variable counts as unset, so `PHOTOCRAFT_PRESENT_MODE=`
+/// turns a fallback off without `unset` (#2491). clap would pass the empty value to the parser.
+fn blank_env_is_unset(arg: Arg) -> Arg {
+    let blank = arg.get_env().and_then(std::env::var_os).is_some_and(|v| v.to_str().is_some_and(|v| v.trim().is_empty()));
+    if blank { arg.env(None::<&str>) } else { arg }
+}
+
+/// clap names the flag when a value from its variable is bad, as if the flag had been given: name
+/// the variable instead when the flag isn't among `args` (without the binary name) (#2491).
+fn name_env_vars(mut error: clap::Error, cmd: &Command, args: &[OsString]) -> clap::Error {
+    // `--flag value` or `--flag=value`.
+    let given = |long: &str| args.iter().filter_map(|a| a.to_str()?.strip_prefix("--")?.strip_prefix(long)).any(|r| r.is_empty() || r.starts_with('='));
+    for kind in [ContextKind::InvalidArg, ContextKind::PriorArg] {
+        let Some(ContextValue::String(shown)) = error.get(kind) else { continue };
+        let Some(arg) = cmd.get_arguments().find(|a| a.to_string() == *shown) else { continue };
+        let (Some(long), Some(var)) = (arg.get_long(), arg.get_env()) else { continue };
+        if !given(long) {
+            error.insert(kind, ContextValue::String(var.to_string_lossy().into_owned()));
+        }
+    }
+    error
 }
 
 /// Parse the launch arguments (without the binary name) with `cmd`, from [`command`]. Old macOS
@@ -167,10 +169,6 @@ pub(crate) fn parse(mut cmd: Command, args: impl IntoIterator<Item = OsString>) 
     let argv = std::iter::once(OsString::from("photocraft")).chain(args.iter().cloned());
     let matches = cmd.try_get_matches_from_mut(argv).map_err(|e| name_env_vars(e, &cmd, &args))?;
     let mut launch = LaunchArgs::from_arg_matches(&matches)?;
-    // Only the control server reads a token, so a stale exported pair doesn't stop a launch.
-    if launch.control.is_some() {
-        conflict(&mut cmd, &matches, "control_token", "control_token_file")?;
-    }
     // `PHOTOCRAFT_IN_WINDOW_MENUS=0` (or off, false, no) is a variable that turns the menus off.
     let menus = launch.in_window_menus;
     let given = |p: &PerProcess| match p.id().and_then(|id| matches.value_source(id)) {
@@ -217,29 +215,10 @@ mod tests {
     }
 
     #[test]
-    fn control_port_rejects_unparseable_values_naming_them() {
-        // Out of range, negative and empty values fail, naming the value (#701); a following
-        // flag is never taken as the value.
-        assert!(usage_error(&["--control", "78787"]).contains("invalid value '78787' for '--control <PORT>'"));
-        assert!(usage_error(&["--control", "-1"]).contains("invalid value '-1'"));
-        assert!(usage_error(&["--control="]).contains("invalid value '' for '--control <PORT>'"));
-        assert!(usage_error(&["--control", "--safe-gpu"]).contains("a value is required for '--control <PORT>'"));
-    }
-
-    #[test]
     fn flags_without_a_value_are_usage_errors() {
         // #6429: a missing value fails the launch, rather than falling back to a generated token
         // or to no root. The tuning flags too, now (#7071).
-        for flag in [
-            "--control",
-            "--control-token",
-            "--control-token-file",
-            "--automation-read-root",
-            "--automation-write-root",
-            "--present-mode",
-            "--frame-latency",
-            "--stroke-trace",
-        ] {
+        for flag in ["--present-mode", "--frame-latency", "--stroke-trace"] {
             let err = usage_error(&[flag]);
             assert!(err.contains(&format!("a value is required for '{flag} <")), "{flag}: {err}");
         }
@@ -253,11 +232,6 @@ mod tests {
             assert!(err.contains(&format!("invalid value '{latency}' for '--frame-latency <1-3>'")), "{err}");
         }
         assert!(usage_error(&["--safe-gpu", "--safe-gpu"]).contains("cannot be used multiple times"));
-        assert!(usage_error(&["--control", "1", "--control", "2"]).contains("cannot be used multiple times"));
-        // A token and a token file are either/or for the control server, and ignored without it.
-        let pair = ["--control-token", "abcd", "--control-token-file", "/tmp/token"];
-        assert!(usage_error(&[&["--control", "1"][..], &pair[..]].concat()).contains("cannot be used with"));
-        assert!(parse_args(&pair).is_ok());
     }
 
     #[test]
@@ -265,14 +239,6 @@ mod tests {
         let parsed = parse_args(&[
             "--stroke-trace",
             "stderr",
-            "--control",
-            "50494",
-            "--control-token",
-            "abcd",
-            "--automation-read-root",
-            "/r",
-            "--automation-write-root",
-            "/w",
             "--safe-gpu",
             "--in-window-menus",
             "--new-instance",
@@ -283,11 +249,6 @@ mod tests {
             "photo.psd",
         ])
         .unwrap();
-        assert_eq!(parsed.control, Some(50494));
-        assert_eq!(parsed.auth.control_token.as_deref(), Some("abcd"));
-        assert_eq!(parsed.auth.control_token_file, None);
-        assert_eq!(parsed.automation.automation_read_root.as_deref(), Some(std::path::Path::new("/r")));
-        assert_eq!(parsed.automation.automation_write_root.as_deref(), Some(std::path::Path::new("/w")));
         assert!(parsed.safe_gpu && parsed.in_window_menus && parsed.new_instance);
         assert_eq!(parsed.present_mode, Some(PresentMode::AutoNoVsync));
         assert_eq!(parsed.frame_latency, Some(1));
@@ -296,21 +257,20 @@ mod tests {
         assert_eq!(parsed.launch_options, PerProcess::FLAGS);
         assert_eq!(parsed.file_names(), FileNames { openable: vec!["photo.psd".to_string()], unreadable: vec![] });
 
-        let parsed = parse_args(&["--control-token-file", "/tmp/token", "--new-instance"]).unwrap();
-        assert_eq!(parsed.auth.control_token_file.as_deref(), Some(std::path::Path::new("/tmp/token")));
+        let parsed = parse_args(&["--new-instance"]).unwrap();
         assert!(parsed.launch_options.is_empty() && !parsed.in_window_menus, "{:?}", parsed.launch_options);
     }
 
     #[test]
     fn version_stops_parsing() {
-        let e = parse_args(&["--version", "--control"]).err().unwrap();
+        let e = parse_args(&["--version", "--frame-latency"]).err().unwrap();
         assert_eq!((e.kind(), e.exit_code()), (ErrorKind::DisplayVersion, 0));
         assert_eq!(e.to_string(), format!("photocraft {}\n", photocraft_engine::build_info::long_version()));
     }
 
     #[test]
     fn help_stops_parsing_and_double_dash_ends_options() {
-        let e = parse_args(&["-h", "--safegpu", "--control"]).err().unwrap();
+        let e = parse_args(&["-h", "--safegpu", "--frame-latency"]).err().unwrap();
         assert_eq!((e.kind(), e.exit_code()), (ErrorKind::DisplayHelp, 0));
 
         assert!(usage_error(&["--safegpu", "--", "--help"]).contains("unexpected argument '--safegpu'"));
@@ -326,7 +286,7 @@ mod tests {
         assert_eq!(parsed.file_names().openable, ["-psn_x.psd"]);
     }
 
-    /// #1108: a name that isn't valid Unicode is reported, not opened; a token must be text.
+    /// #1108: a name that isn't valid Unicode is reported, not opened; a flag's value must be text.
     #[cfg(unix)]
     #[test]
     fn non_unicode_file_names_are_reported_and_tokens_rejected() {
@@ -334,7 +294,7 @@ mod tests {
         let latin1 = OsString::from_vec(b"caf\xe9.psd".to_vec());
         let parsed = parse(command().mut_args(|a| a.env(None::<&str>)), [latin1.clone()]).unwrap();
         assert_eq!(parsed.file_names(), FileNames { openable: vec![], unreadable: vec!["caf\u{fffd}.psd".to_string()] });
-        let e = parse(command().mut_args(|a| a.env(None::<&str>)), [OsString::from("--control-token"), latin1]).err().unwrap();
+        let e = parse(command().mut_args(|a| a.env(None::<&str>)), [OsString::from("--stroke-trace"), latin1]).err().unwrap();
         assert_eq!((e.kind(), e.exit_code()), (ErrorKind::InvalidUtf8, 2));
     }
 }

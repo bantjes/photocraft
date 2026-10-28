@@ -33,6 +33,13 @@ pub struct ShellUi {
     /// Open dialog: (kind, fields). Kinds: newWorkspace, deleteWorkspace, customPar, preview32,
     /// extrasOptions.
     pub dialog: Option<(String, Map<String, Value>)>,
+    /// Window › Closet… is open (`crate::closet`); it opens closed at launch.
+    #[serde(skip)]
+    pub closet_open: bool,
+    /// Every tool, panel and menu item in use whatever `crate::closet::SHIPPED` says: for tests
+    /// of the rest of the app.
+    #[serde(skip)]
+    pub without_starting_sort: bool,
 }
 
 const IDS: [&str; 7] = [

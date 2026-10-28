@@ -3,6 +3,7 @@
 //! Pure Rust (std + serde_json). External tools (`cargo`, `curl`, `tar`) are
 //! invoked through `std::process::Command`.
 
+mod bundle;
 mod corpus;
 mod corpus_pins;
 mod i18n_coverage;
@@ -51,6 +52,7 @@ commands:
                   print the workspace version, or set it (Cargo.toml + Cargo.lock)
   ico <out.ico> <in.png>...
                   pack square PNGs (<= 256 px) into a Windows .ico (see packaging/icons.sh)
+  bundle          build the release app and wrap it as dist/Marian PhotoCraft.app (macOS)
 ";
 
 fn main() -> ExitCode {
@@ -70,6 +72,7 @@ fn main() -> ExitCode {
         Some("scorecard") => scorecard::run(&root(), &rest),
         Some("version") => version::run(&root(), &rest),
         Some("ico") => ico::run(&rest),
+        Some("bundle") => bundle::run(&root()),
         Some("-h" | "--help" | "help") | None => {
             print!("{USAGE}");
             Ok(())

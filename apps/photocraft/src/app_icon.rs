@@ -53,7 +53,7 @@ fn in_app_bundle(exe: &std::path::Path) -> bool {
 }
 
 #[cfg(target_os = "macos")]
-const PNG: &[u8] = include_bytes!("../../../assets/app-icon/photocraft-1024.png");
+const PNG: &[u8] = include_bytes!("../../../assets/app-icon/marian-photocraft-1024.png");
 #[cfg(not(target_os = "macos"))]
 const PNG: &[u8] = include_bytes!("../../../assets/app-icon/hicolor/256x256/apps/ai.storyteller.photocraft.png");
 

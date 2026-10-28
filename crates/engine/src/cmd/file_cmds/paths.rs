@@ -72,10 +72,8 @@ pub(super) fn openable_name(path: &str) -> bool {
 /// import falls back to the embedded JPEG preview with only a warning, which a batch must not
 /// process silently.
 #[cfg(not(target_arch = "wasm32"))]
-const OPENABLE: &[&str] = &[
-    "pdn", "ora", "xcf", "xcfgz", "kra", "krz", "psd", "psb", "psdt", "pcraft", "svg", "svgz", "af", "afdesign", "afphoto", "afpub", "dng", "cr2", "nef",
-    "nrw", "arw", "pef",
-];
+const OPENABLE: &[&str] =
+    &["pdn", "ora", "xcf", "xcfgz", "kra", "krz", "psd", "psb", "psdt", "pcraft", "svg", "svgz", "dng", "cr2", "nef", "nrw", "arw", "pef"];
 
 pub(crate) fn file_name(path: &str) -> String {
     path.rsplit(['/', '\\']).next().unwrap_or(path).to_string()

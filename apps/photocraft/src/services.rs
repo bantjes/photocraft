@@ -634,44 +634,9 @@ fn shell_word(s: &str) -> String {
     if s.bytes().all(|b| b.is_ascii_alphanumeric() || b"/._-+:,@".contains(&b)) { s.to_string() } else { format!("'{}'", s.replace('\'', r"'\''")) }
 }
 
-/// The release-check transport, or `None` inside Flatpak: the sandbox has no network (see the
-/// manifest's finish-args) and `flatpak update` owns updates there.
-fn update_transport(flatpak_id: Option<&std::ffi::OsStr>) -> Option<photocraft_engine::updates_cmds::CheckFn> {
-    flatpak_id.is_none().then(crate::updates::service)
-}
-
-pub fn native(automation: Option<photocraft_automation::AuthorizedWorkspace>) -> Services {
+pub fn native() -> Services {
     let clip: Rc<RefCell<Option<arboard::Clipboard>>> = Rc::default();
     let clip_unreadable: Rc<Cell<bool>> = Rc::default();
-    let automation_read = automation.clone().map(|workspace| {
-        Box::new(move |path: &str| {
-            let bytes = workspace.read(path).map_err(|error| error.to_string())?;
-            let name = Path::new(path).file_name().and_then(|name| name.to_str()).unwrap_or(path).to_string();
-            Ok((name, bytes))
-        }) as photocraft_ui_egui::AutomationReadFn
-    });
-    let automation_write = automation.clone().map(|workspace| {
-        Box::new(move |path: &str, bytes: &[u8]| workspace.write(path, bytes).map_err(|error| error.to_string())) as photocraft_ui_egui::AutomationWriteFn
-    });
-    let automation_open_pcraft = automation.clone().map(|workspace| {
-        Box::new(move |path: &str| {
-            let name = Path::new(path).file_name().and_then(|name| name.to_str()).unwrap_or(path).to_string();
-            let opened = crate::crash_guard::guard("Open", || workspace.open_pcraft(path).map_err(|e| e.to_string()))?;
-            Ok(opened.map(|doc| (name, doc)))
-        }) as photocraft_ui_egui::AutomationOpenPcraftFn
-    });
-    let automation_save = automation.clone().map(|workspace| {
-        std::sync::Arc::new(move |doc: &Document, path: &str, settings: &photocraft_ui_egui::ExportSettings, ctl: &photocraft_ui_egui::jobs_ui::SaveCtl| {
-            save_through(doc, path, settings, ctl, |p, b, _| workspace.write(p, b).map_err(|e| e.to_string()))
-        }) as photocraft_ui_egui::SaveFileFn
-    });
-    let step: fn(&str, &serde_json::Value) -> photocraft_engine::Result<()> = photocraft_automation::workspace::authorize_desktop_engine_step;
-    let automation_authorize = automation.is_some().then_some(step);
-    let automation_command = automation.map(|_| {
-        Box::new(|id: &str, params: &serde_json::Value| {
-            photocraft_automation::workspace::authorize_desktop_engine_command(id, params).map_err(|error| error.to_string())
-        }) as photocraft_ui_egui::AutomationCommandFn
-    });
     Services {
         import: Some(Box::new(|name: &str, bytes: &[u8], opts: &photocraft_io::ImportOptions| {
             crate::crash_guard::guard("Open", || {
@@ -691,12 +656,12 @@ pub fn native(automation: Option<photocraft_automation::AuthorizedWorkspace>) ->
             Some(photocraft_ui_egui::FileStamp { len: meta.len(), modified: meta.modified().ok() })
         })),
         same_file: Some(Box::new(|a: &str, b: &str| same_entry(Path::new(a), Path::new(b), same_file))),
-        automation_read,
-        automation_write,
-        automation_open_pcraft,
-        automation_save,
-        automation_command,
-        automation_authorize,
+        automation_read: None,
+        automation_write: None,
+        automation_open_pcraft: None,
+        automation_save: None,
+        automation_command: None,
+        automation_authorize: None,
         encode_png: Some(Box::new(|w, h, rgba| {
             let img = Image::from_u8(w, h, ChannelLayout::Rgba, rgba.to_vec()).map_err(|e| e.to_string())?;
             photocraft_codecs::encode(&img, photocraft_codecs::Format::Png, &EncodeOptions::default()).map_err(|e| e.to_string())
@@ -704,7 +669,6 @@ pub fn native(automation: Option<photocraft_automation::AuthorizedWorkspace>) ->
         inbox: None,
         open_url: Some(Box::new(|url: &str| open::that(url).map_err(|e| e.to_string()))),
         beep: Some(platform_beep),
-        check_updates: update_transport(std::env::var_os("FLATPAK_ID").as_deref()),
         clipboard_set_image: Some({
             let clip = clip.clone();
             guarded_clipboard_set(move |w: u32, h: u32, px: &[u8]| {

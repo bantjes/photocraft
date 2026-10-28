@@ -22,9 +22,6 @@
 //!   masks (import only); see `kra`.
 //! * GIMP XCF (`.xcf`, `.xcf.gz`) documents open with their layers, groups, masks, blend modes,
 //!   channels and selection, read only; see `xcf`.
-//! * Affinity documents (`.af`, `.afdesign`, `.afphoto`, `.afpub`) open natively
-//!   with no source save path, what isn't imported listed in the warnings; a file
-//!   whose native data can't be read opens as its embedded preview; see `affinity`.
 //! * Every other format goes through `photocraft-codecs` as a single layer
 //!   (depth and Gray/RGB/CMYK model preserved): a locked "Background" when the
 //!   image is opaque, a normal "Layer 0" when it has transparency.
@@ -36,7 +33,6 @@
 
 pub mod abr_map;
 mod adjust_map;
-pub mod affinity;
 pub mod annotations_map;
 pub mod asl_map;
 pub mod blocks;
@@ -461,13 +457,8 @@ fn import_stages(name: &str, bytes: &[u8], ctl: &photocraft_raster::Interrupt, o
         let document = photocraft_format::load_from_bytes(bytes)?;
         return Ok(ImportResult { warnings: open_warnings(&document), document, source_read_only: false, preview_only: false });
     }
-    // Magic first: an Affinity file renamed .psd is still Affinity (#5258 corpus
-    // preview_never_saves_back_to_its_native_or_renamed_source).
     if is_psd(bytes) {
         return import_psd(name, ctl, damaged, |want, recover| PsdFile::from_bytes_and_merged_recovering(bytes, want, recover));
-    }
-    if affinity::is_affinity(bytes) || affinity::has_extension(name) {
-        return affinity::import(name, bytes);
     }
     if ora::is_ora(bytes) || has_extension(name, "ora") {
         return ora::import(name, bytes, ctl);
@@ -575,9 +566,6 @@ fn export_stages(doc: &Document, name_or_ext: &str, opts: &ExportOptions, ctl: &
     let ext = extension(name_or_ext);
     if ext == "pdn" {
         return Err(IoError::Unsupported("PDN is import-only; save as .pcraft to preserve all layers and blend modes".into()));
-    }
-    if affinity::EXTENSIONS.contains(&ext.as_str()) {
-        return Err(IoError::Unsupported("Affinity export is not implemented; save a new PSD, PNG or .pcraft copy".into()));
     }
     if kra::EXTENSIONS.contains(&ext.as_str()) {
         return Err(IoError::Unsupported("Krita files are import-only; save as .ora to open the layers in Krita, or .pcraft to keep everything".into()));

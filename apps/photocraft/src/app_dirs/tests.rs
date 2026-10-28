@@ -37,11 +37,11 @@ fn no_marker_uses_the_platform_dir() {
     assert!(!exe.join(PORTABLE_DATA_DIR).exists(), "no portable folder without a marker");
     // The convention per platform.
     if cfg!(target_os = "macos") {
-        assert_eq!(dir, root.join("home/Library/Application Support/Photocraft"));
+        assert_eq!(dir, root.join("home/Library/Application Support/Marian PhotoCraft"));
     } else if cfg!(windows) {
-        assert_eq!(dir, root.join("appdata").join("Photocraft"));
+        assert_eq!(dir, root.join("appdata").join("Marian PhotoCraft"));
     } else {
-        assert_eq!(dir, root.join("home/.config/photocraft"));
+        assert_eq!(dir, root.join("home/.config/marian-photocraft"));
     }
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -116,11 +116,11 @@ fn override_wins_over_portable() {
 #[test]
 fn autosaves_stay_out_of_the_roaming_profile() {
     let root = temp("recovery-local");
-    let settings = root.join("appdata").join("Photocraft");
+    let settings = root.join("appdata").join("Marian PhotoCraft");
     let local = root.join("local");
     let env = env_of(&[("LOCALAPPDATA", &local)]);
     let platform = DataDir { dir: Some(settings.clone()), mode: Mode::Platform, warning: None };
-    let expected = if cfg!(windows) { local.join("Photocraft").join("Recovery") } else { settings.join("Recovery") };
+    let expected = if cfg!(windows) { local.join("Marian PhotoCraft").join("Recovery") } else { settings.join("Recovery") };
     assert_eq!(resolve_recovery(&platform, &env), Some(expected));
     for mode in [Mode::Override, Mode::Portable] {
         let d = DataDir { dir: Some(settings.clone()), mode, warning: None };
@@ -141,14 +141,14 @@ fn autosaves_stay_out_of_the_roaming_profile() {
 #[test]
 fn autosaves_go_to_the_xdg_state_folder() {
     let root = temp("recovery-xdg");
-    let settings = root.join("home").join(".config").join("photocraft");
+    let settings = root.join("home").join(".config").join("marian-photocraft");
     let home = root.join("home");
     let state = root.join("state");
     let platform = DataDir { dir: Some(settings.clone()), mode: Mode::Platform, warning: None };
     let xdg = !cfg!(windows) && !cfg!(target_os = "macos");
     let expect = |xdg_path: PathBuf| Some(if xdg { xdg_path } else { settings.join("Recovery") });
-    assert_eq!(resolve_recovery(&platform, env_of(&[("XDG_STATE_HOME", &state), ("HOME", &home)])), expect(state.join("photocraft").join("Recovery")));
-    let default = home.join(".local").join("state").join("photocraft").join("Recovery");
+    assert_eq!(resolve_recovery(&platform, env_of(&[("XDG_STATE_HOME", &state), ("HOME", &home)])), expect(state.join("marian-photocraft").join("Recovery")));
+    let default = home.join(".local").join("state").join("marian-photocraft").join("Recovery");
     assert_eq!(resolve_recovery(&platform, env_of(&[("HOME", &home)])), expect(default.clone()));
     let relative = PathBuf::from("relative/state");
     assert_eq!(resolve_recovery(&platform, env_of(&[("XDG_STATE_HOME", &relative), ("HOME", &home)])), expect(default.clone()));
@@ -174,7 +174,7 @@ fn autosave(dir: &Path, key: &str) {
 fn autosaves_from_the_old_folder_move_to_the_new_one() {
     let root = temp("recovery-move");
     let legacy = root.join("roaming").join("Recovery");
-    let dir = root.join("local").join("Photocraft").join("Recovery");
+    let dir = root.join("local").join("Marian PhotoCraft").join("Recovery");
     autosave(&legacy, "a");
     assert_eq!(adopt_legacy_recovery(&legacy, &dir), dir);
     assert!(!legacy.exists(), "the old folder is gone");
@@ -442,4 +442,49 @@ fn missing_exe_dir_or_env_never_panics() {
     let empty = PathBuf::new();
     let d = resolve(env_of(&[("PHOTOCRAFT_CONFIG_DIR", &empty), ("HOME", &empty), ("APPDATA", &empty)]), None);
     assert_eq!(d.dir, None, "empty variables are ignored");
+}
+
+/// Marian PhotoCraft's first start copies the original PhotoCraft folder (without its logs,
+/// crash-recovery copies or running-instance files) and switches the copy to the blue look; a
+/// later start, with its own folder there, copies nothing.
+#[test]
+fn the_first_start_adopts_the_original_settings_in_blue() {
+    let root = temp("adopt-original");
+    let original = root.join("Photocraft");
+    let own = root.join("Marian PhotoCraft");
+    std::fs::create_dir_all(original.join("Presets")).unwrap();
+    std::fs::create_dir_all(original.join("logs")).unwrap();
+    std::fs::create_dir_all(original.join("Recovery")).unwrap();
+    std::fs::write(original.join("Presets/brushes.json"), "[]").unwrap();
+    std::fs::write(original.join("instance.json"), "{}").unwrap();
+    std::fs::write(original.join("preferences.json"), r#"{"interface":{"theme":"pro","appearanceMode":"dark","darkTheme":"pro"},"general":{"x":1}}"#).unwrap();
+
+    adopt_original(&own, &original).unwrap();
+    assert!(own.join("Presets/brushes.json").is_file());
+    for left in ["logs", "Recovery", "instance.json"] {
+        assert!(!own.join(left).exists(), "{left} stays with the original");
+    }
+    let prefs: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(own.join("preferences.json")).unwrap()).unwrap();
+    assert_eq!(prefs["interface"]["lightTheme"], "marianBlue");
+    assert_eq!(prefs["interface"]["appearanceMode"], "light");
+    assert_eq!(prefs["interface"]["darkTheme"], "pro", "the rest of the copied settings stay");
+    assert_eq!(prefs["general"]["x"], 1);
+    assert!(original.join("logs").is_dir() && original.join("instance.json").is_file(), "the original is only read");
+
+    std::fs::write(own.join("preferences.json"), "mine").unwrap();
+    adopt_original(&own, &original).unwrap();
+    assert_eq!(std::fs::read_to_string(own.join("preferences.json")).unwrap(), "mine", "copied only once");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// With no original PhotoCraft folder, the first start still begins in the blue look.
+#[test]
+fn a_fresh_start_without_the_original_is_blue_too() {
+    let root = temp("adopt-fresh");
+    let own = root.join("Marian PhotoCraft");
+    adopt_original(&own, &root.join("Photocraft")).unwrap();
+    let prefs: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(own.join("preferences.json")).unwrap()).unwrap();
+    assert_eq!(prefs["interface"]["theme"], "marianBlue");
+    assert_eq!(prefs["interface"]["appearanceMode"], "light");
+    let _ = std::fs::remove_dir_all(&root);
 }

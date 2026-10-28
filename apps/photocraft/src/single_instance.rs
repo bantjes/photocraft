@@ -37,9 +37,11 @@ use std::sync::mpsc::{SyncSender, sync_channel};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
-use photocraft_automation::security::{LineRead, generate_token, read_bounded_line, token_matches};
+mod token;
+
 use photocraft_ui_egui::{OsEvent, OsEventsFn};
 use serde_json::{Value, json};
+use token::{LineRead, generate_token, read_bounded_line, token_matches};
 
 use crate::launch_args::PerProcess;
 
@@ -360,7 +362,7 @@ pub fn claim_in(dir: &Path, paths: &[String], timing: Timing, transport: &Transp
 
 fn serve(dir: &Path, lock: File, timing: Timing, transport: &Transport) -> Result<Primary, String> {
     let (listener, endpoint) = Listener::bind(transport)?;
-    let token = generate_token().map_err(|e| e.to_string())?;
+    let token = generate_token()?;
     write_info(dir, &endpoint, &token)?;
     #[cfg(unix)]
     let socket = match &endpoint {

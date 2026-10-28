@@ -83,7 +83,10 @@ pub(super) fn tool_flyout_release(row: Rect, pointer: Option<Pos2>, released: bo
 pub fn toolbar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     let (w1, bx, m) = if t.pro { (40.0, 30.0, 5i8) } else { (50.0, 36.0, 7i8) };
-    let sections = visible_sections(&app.session.prefs().toolbar.hidden);
+    let mut hidden = app.session.prefs().toolbar.hidden.clone();
+    // Tools put away in the Closet or the Basement leave the toolbar too.
+    hidden.extend(crate::closet::hidden_tool_names(app));
+    let sections = visible_sections(&hidden);
     // Two columns when the header chevron asks for them; a column that doesn't fit scrolls.
     let double = app.ui.panels.toolbar_double;
     let w = if double { w1 + bx + 2.0 } else { w1 };
@@ -297,6 +300,10 @@ pub fn toolbar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                                 }
                             });
                         }
+                    }
+                    // The way into the Closet and the Basement.
+                    if icons::button(ui, "closet", bx, app.ui.shell.closet_open, tl!("Closet…")).clicked() {
+                        let _ = crate::menus::invoke(app, &ctx, "window.closet", json!({}));
                     }
                     if icons::button(ui, "ellipsis", bx, false, tl!("Edit Toolbar…")).clicked() {
                         let _ = crate::menus::invoke(app, &ctx, "edit.toolbar", json!({}));

@@ -112,6 +112,16 @@ pub use title_bar::{sync_window_title, system_title_bar, title_bar, window_title
 use toolbar::{STUDIO_CHIP, TOOL_SECTIONS, chips_height, color_chips, tool_flyout_drag_open, tool_flyout_release, toolbar_icon_size, visible_sections};
 pub use toolbar::{paint_toolbar_flyout_indicator, toolbar};
 
+/// The toolbar's sections, slots and tools, in toolbar order.
+pub(crate) fn toolbar_sections() -> &'static [&'static [&'static [crate::state::Tool]]] {
+    toolbar::TOOL_SECTIONS
+}
+
+#[cfg(test)]
+pub(crate) fn visible_sections_for_tests(hidden: &[String]) -> Vec<Vec<(usize, Vec<crate::state::Tool>)>> {
+    visible_sections(hidden)
+}
+
 fn c32(c: [f32; 4]) -> Color32 {
     Color32::from_rgba_unmultiplied((c[0] * 255.0) as u8, (c[1] * 255.0) as u8, (c[2] * 255.0) as u8, (c[3] * 255.0) as u8)
 }
@@ -158,19 +168,19 @@ mod title_tests {
 
     #[test]
     fn window_title_with_no_document_is_the_app_name() {
-        assert_eq!(window_title(&app(true)), "PhotoCraft");
+        assert_eq!(window_title(&app(true)), "Marian PhotoCraft");
     }
 
     #[test]
     fn window_title_follows_the_active_file() {
         let mut app = app(true);
         open_named(&mut app, "foo.psd");
-        assert_eq!(window_title(&app), "foo.psd \u{2014} PhotoCraft");
+        assert_eq!(window_title(&app), "foo.psd \u{2014} Marian PhotoCraft");
         // Unsaved changes gain a `*` prefix, like the `•` in the app-drawn title.
         if let Some(st) = app.session.active_mut() {
             st.revision += 1;
         }
-        assert_eq!(window_title(&app), "*foo.psd \u{2014} PhotoCraft");
+        assert_eq!(window_title(&app), "*foo.psd \u{2014} Marian PhotoCraft");
     }
 
     #[test]
@@ -178,11 +188,11 @@ mod title_tests {
         let mut app = app(true);
         open_named(&mut app, "foo.psd");
         app.session.prefs.edit(|p| p.interface.show_file_name_in_title = false);
-        assert_eq!(window_title(&app), "PhotoCraft");
+        assert_eq!(window_title(&app), "Marian PhotoCraft");
         if let Some(st) = app.session.active_mut() {
             st.revision += 1;
         }
-        assert_eq!(window_title(&app), "*PhotoCraft");
+        assert_eq!(window_title(&app), "*Marian PhotoCraft");
     }
 
     #[test]
@@ -204,7 +214,7 @@ mod title_tests {
         app.session.prefs.edit(|p| p.interface.show_file_name_in_title = false);
         let hidden = texts(&mut app);
         assert!(!hidden.iter().any(|t| t.contains("foo.psd")), "file name hidden: {hidden:?}");
-        assert!(hidden.iter().any(|t| t.contains("PhotoCraft")), "app name kept: {hidden:?}");
+        assert!(hidden.iter().any(|t| t.contains("Marian PhotoCraft")), "app name kept: {hidden:?}");
     }
 
     #[test]
@@ -242,11 +252,11 @@ mod title_tests {
         let ctx = egui::Context::default();
         crate::PhotocraftApp::setup_context(&ctx, crate::theme::ThemeKind::ALL[0]);
         super::sync_window_title(&mut app, &ctx);
-        assert_eq!(app.last_window_title, "PhotoCraft");
+        assert_eq!(app.last_window_title, "Marian PhotoCraft");
         let mut out = ctx.run_ui(egui::RawInput::default(), |_| {});
         out.textures_delta.clear();
         let cmds = out.viewport_output.remove(&egui::ViewportId::ROOT).map(|v| v.commands).unwrap_or_default();
-        assert!(cmds.iter().any(|c| matches!(c, egui::ViewportCommand::Title(t) if t == "PhotoCraft")), "{cmds:?}");
+        assert!(cmds.iter().any(|c| matches!(c, egui::ViewportCommand::Title(t) if t == "Marian PhotoCraft")), "{cmds:?}");
         // Same document state again: the cached title stops a repeat command.
         super::sync_window_title(&mut app, &ctx);
         let mut out = ctx.run_ui(egui::RawInput::default(), |_| {});
@@ -255,7 +265,7 @@ mod title_tests {
         assert!(!cmds.iter().any(|c| matches!(c, egui::ViewportCommand::Title(_))), "repeat Title: {cmds:?}");
         open_named(&mut app, "foo.psd");
         super::sync_window_title(&mut app, &ctx);
-        assert_eq!(app.last_window_title, "foo.psd \u{2014} PhotoCraft");
+        assert_eq!(app.last_window_title, "foo.psd \u{2014} Marian PhotoCraft");
     }
 }
 

@@ -149,7 +149,6 @@ pub mod type_extra_cmds;
 pub mod type_mask_cmds;
 pub mod type_spell_cmds;
 pub mod type_styles_cmds;
-pub mod updates_cmds;
 pub(super) mod variables_cmds;
 pub mod vector_cmds;
 pub(super) mod video_cmds;
@@ -1267,7 +1266,6 @@ fn build() -> Vec<CommandSpec> {
     v.extend(crate::layer_multi_cmds::specs());
     v.extend(crate::layer_copy_cmds::specs());
     v.extend(crate::prefs::specs());
-    v.extend(crate::updates_cmds::specs());
     v.extend(crate::edit_menu_cmds::specs());
     v.extend(crate::fill_key_cmds::specs());
     v.extend(crate::sample_cmds::specs());

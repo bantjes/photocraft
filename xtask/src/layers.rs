@@ -44,7 +44,6 @@ pub const TABLE: &[(&str, Class)] = &[
     // IPP client for CUPS printing (pure Rust, no dependencies), used by `engine` on Unix.
     ("ipp", Class::Standalone),
     ("raw", Class::Standalone),
-    ("affinity", Class::Standalone),
     ("adobe-assets", Class::Standalone),
     // Pen tablet input (the one isolated `unsafe` helper: AppKit interop on macOS).
     ("tablet", Class::Standalone),
@@ -64,7 +63,6 @@ pub const TABLE: &[(&str, Class)] = &[
     ("plugins", Class::Layer(4)),
     ("engine", Class::Layer(5)),
     ("ui-egui", Class::Layer(6)),
-    ("automation", Class::Layer(6)),
     ("platform", Class::Layer(6)),
     ("testkit", Class::Testkit),
     // L7 apps and tooling
@@ -373,7 +371,7 @@ mod tests {
 
     #[test]
     fn apps_and_xtask_exempt() {
-        for app in ["photocraft", "photocraft-cli", "photocraft-web", "photocraft-web-boot", "xtask"] {
+        for app in ["photocraft", "photocraft-web", "photocraft-web-boot", "xtask"] {
             assert!(check(&[c(app, &[("egui", Normal, false), ("photocraft-ui-egui", Normal, true)])]).is_empty());
         }
     }

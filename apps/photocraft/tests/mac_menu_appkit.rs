@@ -112,7 +112,7 @@ fn main() {
     assert_eq!(tops, ["PhotoCraft", "File", "Edit", "Image", "Layer", "Type", "Select", "Filter", "View", "Window", "Help"]);
     let app_menu = submenu(&bar, "PhotoCraft");
     let names = titles(&app_menu);
-    for want in ["About PhotoCraft", "Settings", "Language", "Appearance", "Hide PhotoCraft", "Quit PhotoCraft"] {
+    for want in ["About Marian PhotoCraft", "Settings", "Language", "Appearance", "Hide Marian PhotoCraft", "Quit Marian PhotoCraft"] {
         assert!(names.iter().any(|n| n == want), "{want} missing from the app menu: {names:?}");
     }
     let quit = app_menu.itemAtIndex(index(&app_menu, "Quit PhotoCraft")).expect("Quit");

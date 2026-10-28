@@ -42,7 +42,7 @@ fn ukrainian_native_app_menu_keeps_product_and_language_names() {
         let h = harness();
         let layout = crate::native_menu::photocraft_layout(&crate::menus::menu_items(h.state()), lang("uk"), "uk");
         for (id, template) in [("help.about", "About {app}"), (crate::native_menu::HIDE, "Hide {app}"), ("file.exit", "Quit {app}")] {
-            let label = fmt(tr(lang("uk"), template), &[("app", "PhotoCraft")]);
+            let label = fmt(tr(lang("uk"), template), &[("app", "Marian PhotoCraft")]);
             assert!(label.contains("PhotoCraft"), "{id}: {label}");
             assert_eq!(layout.bar.find(id).map(|item| item.label.as_str()), Some(label.as_str()), "{id}");
         }

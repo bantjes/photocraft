@@ -51,6 +51,11 @@ pub(crate) fn modal_allows(app: &PhotocraftApp, id: &str) -> bool {
 }
 
 /// Top-level menus in Photoshop order.
+/// Whether the menus show `id` checked (an open panel, a selected mode).
+pub(crate) fn item_checked(app: &PhotocraftApp, id: &str) -> Option<bool> {
+    state::checked(app, id)
+}
+
 pub const TOP_MENUS: [&str; 10] = ["File", "Edit", "Image", "Layer", "Type", "Select", "Filter", "View", "Window", "Help"];
 
 /// UI-level commands (handled by the shell rather than the engine): id, label, menu, shortcut.

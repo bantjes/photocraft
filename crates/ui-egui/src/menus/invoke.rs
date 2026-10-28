@@ -57,13 +57,10 @@ pub fn invoke(app: &mut PhotocraftApp, ctx: &egui::Context, id: &str, params: Va
 }
 
 /// [`invoke`] without the unsaved-changes prompt, for once the user has already answered it.
-fn invoke_early_commands(app: &mut PhotocraftApp, ctx: &egui::Context, id: &str, params: &Value) -> Option<Result<Value, String>> {
+fn invoke_early_commands(app: &mut PhotocraftApp, id: &str, params: &Value) -> Option<Result<Value, String>> {
     if let Some(tool) = crate::tool_shortcuts::tool(id) {
         crate::tool_memory::select(app, tool);
         return Some(Ok(json!({"tool": tool})));
-    }
-    if id == "help.checkForUpdates" {
-        return Some(crate::updates_ui::check(app, ctx, params.clone()));
     }
     if id == "ui.symmetryTransform" {
         return Some(crate::symmetry_ui::begin(app).map(|_| Value::Null));
@@ -86,10 +83,6 @@ fn invoke_early_commands(app: &mut PhotocraftApp, ctx: &egui::Context, id: &str,
     }
     if let Some(result) = crate::panel_docking::command(app, id, params) {
         return Some(result);
-    }
-    // Help › Discord, website, GitHub, Report an Issue.
-    if let Some(url) = crate::links::url_for(id) {
-        return Some(Ok(crate::links::open(app, ctx, url)));
     }
     if id == "view.proofSetup.custom" {
         return Some(Ok(json!({"dialog": crate::filter_dialog::open(app, "view.proofSetup")})));
@@ -284,7 +277,10 @@ fn invoke_file_commands(app: &mut PhotocraftApp, ctx: &egui::Context, id: &str, 
 }
 
 pub(crate) fn invoke_unguarded(app: &mut PhotocraftApp, ctx: &egui::Context, id: &str, params: Value) -> Result<Value, String> {
-    if let Some(result) = invoke_early_commands(app, ctx, id, &params) {
+    if let Some(result) = invoke_early_commands(app, id, &params) {
+        return result;
+    }
+    if let Some(result) = crate::closet::command(app, ctx, id, &params) {
         return result;
     }
     if let Some(result) = invoke_shell_commands(app, ctx, id, &params) {
@@ -657,6 +653,7 @@ fn invoke_window_command(app: &mut PhotocraftApp, ctx: &egui::Context, id: &str)
         | "window.theme.breezeLight"
         | "window.theme.breezeDark"
         | "window.theme.softLight"
+        | "window.theme.marianBlue"
         | "window.theme.softDark" => {
             let theme = crate::theme::ThemeKind::from_name(&id["window.theme.".len()..]).unwrap_or_default();
             app.set_theme(ctx, theme);
